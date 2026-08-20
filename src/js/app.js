@@ -9,6 +9,7 @@ import * as store from './store.js';
 import { state } from './store.js';
 import * as phone from './phone.js';
 import { endTone, ringback, ringtone, setVolumes } from './audio.js';
+import * as voicefx from './voicefx.js';
 import { duration, esc, sameNumber } from './format.js';
 
 import * as dialer from './ui/dialer.js';
@@ -93,6 +94,12 @@ function updateMissedBadge() {
  *  whenever a slider moves. */
 export function applyVolumes() {
   setVolumes({ ring: state.settings.ringVolume, tone: state.settings.toneVolume });
+  voicefx.configure({
+    enabled: !!state.settings.voiceEnabled,
+    pitch: state.settings.voicePitch,
+    formant: state.settings.voiceFormant,
+    brightness: state.settings.voiceBrightness,
+  });
 }
 
 function applyTheme() {

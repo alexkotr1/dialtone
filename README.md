@@ -77,6 +77,50 @@ title bar rather than losing the call.
 
 Incoming calls ring, and can be answered or declined.
 
+## Changing your voice
+
+Settings → Voice transforms the outgoing microphone. It never touches what you
+hear.
+
+The thing that makes most voice changers obvious is that they shift pitch and
+drag the **formants** along with it. Formants are the resonances of your throat
+and mouth, and their positions encode the size of the speaker — move them with
+the pitch and you do not sound like a different person, you sound like the same
+person on helium. Dialtone moves the two independently:
+
+| control | what it changes |
+|---|---|
+| **Pitch** | how high the voice reads |
+| **Size** | how large the speaker reads (the formants) |
+| **Brightness** | spectral tilt, a finishing touch |
+
+A convincing change is a large pitch move with a *small* size move — the
+`Higher` preset is pitch ×1.62 with formants only ×1.16, which is roughly the
+real difference between an adult male and female voice. Setting both to the
+same number is exactly what produces a cartoon.
+
+`Disguised` is the subtlest option: it keeps your pitch close to normal and
+changes the timbre. It is the least noticeable to a stranger and the most
+effective against somebody who knows your voice.
+
+**Record and play back** captures three seconds and replays it exactly as the
+far end would receive it. Use headphones, or it records its own playback.
+
+Measured against synthetic speech with known pitch and formants
+(`tools/voicelab`), on the default `Higher` preset:
+
+- F0 moves ×1.621 against a ×1.62 request
+- the spectrum moves ×1.15 against a ×1.16 request — the formants follow their
+  own ratio, not the pitch
+- plosive attacks stay within ×1.12, so consonants do not smear
+- 42.7ms of latency, about 7% of one core
+
+Known limits: it transforms voices, not identities — it will not make you sound
+like a specific person, and it is not trying to. Turning it on or off takes
+effect on the next call, because that changes the shape of the audio graph
+rather than a parameter. And a signal with no jitter at all (a synthesiser, not
+a human) has deep enough spectral nulls to confuse the envelope estimator.
+
 ## Keyboard
 
 | | |
@@ -127,6 +171,25 @@ what it thinks is wrong and keeps retrying in the background.
 
 **The microphone is only open on the Settings screen**, for the level meter,
 and during a call. Not otherwise.
+
+## Measuring the voice changer
+
+`tools/voicelab` is an offline harness for the DSP. It synthesises speech whose
+pitch and formants are known by construction — a real recording is useless for
+this, because you cannot say how far a formant moved if you never knew where it
+started — runs the exact module that runs on the audio thread, and reports what
+actually happened.
+
+```
+cd tools/voicelab
+python make_speech.py out/speech.wav
+node run_dsp.mjs out/speech.wav out/higher.wav --pitch 1.62 --formant 1.16
+python analyze.py out/speech.wav out/higher.wav out/speech.json --pitch 1.62 --formant 1.16
+python sweep.py                # rank a matrix of settings on the same metrics
+```
+
+Needs `numpy` and `scipy`. Every constant in `voicechanger.js` that has a
+number in its comment was chosen here rather than by ear.
 
 ## Tests
 

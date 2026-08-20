@@ -26,6 +26,20 @@ const DEFAULT_SETTINGS = {
   /** Output levels, 0..1. 0.6 is the loudness these sounds always had. */
   ringVolume: 0.6,
   toneVolume: 0.6,
+
+  /**
+   * Voice transformation, applied to the outgoing microphone only.
+   *
+   * `pitch` and `formant` are deliberately separate. Pitch alone is what a
+   * toy voice changer does, and it drags the vocal-tract resonances along
+   * with it, which is why those always sound like a chipmunk. See
+   * js/dsp/voicechanger.js.
+   */
+  voiceEnabled: false,
+  voicePreset: 'higher',
+  voicePitch: 1.62,
+  voiceFormant: 1.16,
+  voiceBrightness: 0.14,
 };
 
 const listeners = new Set();

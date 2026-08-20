@@ -2,7 +2,7 @@
   "name": "dialtone",
   "version": "1.1.2",
   "private": true,
-  "description": "A desktop softphone for FreeSWITCH — dialpad, recents, contacts.",
+  "description": "A desktop softphone for FreeSWITCH \u2014 dialpad, recents, contacts.",
   "author": "alexk",
   "license": "UNLICENSED",
   "main": "main.js",
@@ -13,12 +13,13 @@
     "test:cert": "electron . --dev --seed --selftest test/cert.js",
     "wss": "node test/wss-server.js",
     "shots": "powershell -ExecutionPolicy Bypass -File shots.ps1",
-    "postinstall": "node node_modules/electron/install.js && npm run build:vendor",
+    "postinstall": "node node_modules/electron/install.js && npm run build:vendor && npm run build:worklet",
     "build:icon": "electron tools/make-icon.js",
     "shortcut": "powershell -ExecutionPolicy Bypass -File tools/install-shortcut.ps1",
     "build:vendor": "esbuild node_modules/jssip/lib/JsSIP.js --bundle --format=iife --global-name=JsSIP --outfile=vendor/jssip.js --platform=browser --target=chrome120",
-    "dist": "npm run build:vendor && electron-builder --win",
-    "dist:dir": "npm run build:vendor && electron-builder --win --dir"
+    "dist": "npm run build:vendor && npm run build:worklet && electron-builder --win",
+    "dist:dir": "npm run build:vendor && npm run build:worklet && electron-builder --win --dir",
+    "build:worklet": "esbuild src/js/dsp/worklet.js --bundle --format=iife --outfile=vendor/voice-worklet.js --platform=browser --target=chrome120"
   },
   "dependencies": {
     "jssip": "^3.13.8"

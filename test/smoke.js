@@ -283,6 +283,256 @@
     return seen.detail;
   });
 
+  // --- voice transformation ---------------------------------------------
+  //
+  // The DSP has its own measurement harness in tools/voicelab, which checks
+  // accuracy against synthetic speech with known pitch and formants. What is
+  // worth checking HERE is the part that harness cannot see: that the module
+  // still loads in the real renderer, that bypass is genuinely a no-op, and
+  // that pitch and formants remain independent - the property the whole design
+  // exists for, and the one a careless edit would silently destroy.
+
+  const { VoiceChanger, PRESETS } = await import('../src/js/dsp/voicechanger.js');
+  const { FFT } = await import('../src/js/dsp/fft.js');
+  const voicefx = await import('../src/js/voicefx.js');
+
+  /**
+   * A vowel: glottal pulses through a resonator at 1000Hz.
+   *
+   * Source-filter, not a sum of sinusoids. A bare harmonic stack has literal
+   * zeros between its partials, and the log-spectrum valleys that creates drag
+   * the cepstral envelope far below the peaks - so the whitening step leaves a
+   * huge tilt in the excitation and the measurement reports formant motion
+   * that a real microphone would never produce. Every real source has a
+   * continuous spectrum; testing against one that does not measures the test
+   * signal rather than the code.
+   */
+  const vowelish = (n, f0, sr) => {
+    const src = new Float32Array(n);
+    // Deterministic PRNG: the same waveform every run, so a failure is
+    // reproducible rather than a coin toss.
+    let seed = 22222;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x3fffffff - 1;
+    };
+    let t = 0;
+    while (t < n) {
+      // Jitter and shimmer, at the couple of percent a healthy voice has.
+      // Without them the excitation is perfectly periodic, the spectrum has
+      // true nulls between its harmonics, and the log of those nulls drags any
+      // cepstral envelope estimate far below the peaks - so the test measures
+      // an artefact of an impossible signal. Real vocal folds never repeat a
+      // period exactly.
+      const period = (sr / f0) * (1 + rnd() * 0.012);
+      const amp = 1 + rnd() * 0.05;
+      const start = Math.floor(t);
+      const len = Math.max(4, Math.floor(period * 0.6));
+      for (let i = 0; i < len && start + i < n; i++) {
+        const k = i / len;
+        // Rosenberg pulse: slow rise, faster fall.
+        src[start + i] += amp * (k < 0.6
+          ? 3 * (k / 0.6) ** 2 - 2 * (k / 0.6) ** 3
+          : 1 - ((k - 0.6) / 0.4) ** 2);
+      }
+      t += period;
+    }
+    // Radiation at the lips is a differentiator (+6dB/octave).
+    const x = new Float32Array(n);
+    for (let i = 1; i < n; i++) x[i] = src[i] - src[i - 1];
+    // Three formants, at the measured averages for /a/. One resonator is not
+    // enough: it leaves most of the band nearly empty, the envelope estimate
+    // there is unconstrained, and the test then measures that rather than the
+    // transform. A vowel is several resonances spanning the range.
+    for (const [freq, bw] of [[730, 60], [1090, 90], [2440, 120]]) {
+      const r = Math.exp((-Math.PI * bw) / sr);
+      const theta = (2 * Math.PI * freq) / sr;
+      const a1 = 2 * r * Math.cos(theta);
+      const a2 = -r * r;
+      let y1 = 0;
+      let y2 = 0;
+      for (let i = 0; i < n; i++) {
+        const y = x[i] * (1 - r) + a1 * y1 + a2 * y2;
+        y2 = y1;
+        y1 = y;
+        x[i] = y;
+      }
+    }
+    let peak = 0;
+    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(x[i]));
+    for (let i = 0; i < n; i++) x[i] = (x[i] / peak) * 0.5;
+    return x;
+  };
+
+  /** F0 by autocorrelation, over the steady part only. */
+  const measureF0 = (x, sr, from) => {
+    const seg = x.subarray(from, from + 8192);
+    let best = 0;
+    let bestLag = 0;
+    for (let lag = Math.floor(sr / 400); lag < Math.floor(sr / 60); lag++) {
+      let acc = 0;
+      for (let i = 0; i + lag < seg.length; i++) acc += seg[i] * seg[i + lag];
+      if (acc > best) { best = acc; bestLag = lag; }
+    }
+    return bestLag ? sr / bestLag : 0;
+  };
+
+  const runDsp = (params, sr = 48000, secs = 0.9) => {
+    const n = Math.floor(sr * secs);
+    const input = vowelish(n, 120, sr);
+    const out = new Float32Array(n);
+    const vc = new VoiceChanger(sr);
+    vc.setParams(params);
+    for (let i = 0; i < n; i += 128) {
+      const len = Math.min(128, n - i);
+      vc.process(input.subarray(i, i + len), out.subarray(i, i + len));
+    }
+    return { input, out, sr, latency: vc.latency };
+  };
+
+  await check('FFT inverts itself', () => {
+    const N = 256;
+    const f = new FFT(N);
+    const re = new Float32Array(N);
+    const im = new Float32Array(N);
+    const orig = new Float32Array(N);
+    for (let i = 0; i < N; i++) { orig[i] = Math.sin((7 * 2 * Math.PI * i) / N); re[i] = orig[i]; }
+    f.forward(re, im);
+    f.inverse(re, im);
+    let err = 0;
+    for (let i = 0; i < N; i++) err = Math.max(err, Math.abs(re[i] - orig[i]));
+    assert(err < 1e-4, `round-trip error ${err}`);
+    return `max error ${err.toExponential(1)}`;
+  });
+
+  await check('bypass passes audio through unchanged', () => {
+    const { input, out, latency } = runDsp({ pitch: 1, formant: 1, brightness: 0 });
+    // Compare past the priming region, allowing for algorithmic latency.
+    let err = 0;
+    for (let i = latency + 4096; i < input.length - 1; i++) {
+      err = Math.max(err, Math.abs(out[i] - input[i - latency]));
+    }
+    assert(err < 0.05, `bypass altered the signal by ${err.toFixed(3)}`);
+    return `max deviation ${err.toFixed(4)}`;
+  });
+
+  await check('the output is always finite', () => {
+    for (const p of [{ pitch: 2.4, formant: 1.9 }, { pitch: 0.42, formant: 0.55 }]) {
+      const { out } = runDsp(p);
+      for (let i = 0; i < out.length; i++) {
+        assert(Number.isFinite(out[i]), `non-finite sample at ${i} for ${JSON.stringify(p)}`);
+        assert(Math.abs(out[i]) <= 1.0001, `sample out of range: ${out[i]}`);
+      }
+    }
+  });
+
+  await check('pitch shifting moves F0 by the requested ratio', () => {
+    for (const ratio of [1.6, 0.7]) {
+      const { out, sr, latency } = runDsp({ pitch: ratio, formant: 1 });
+      const f0 = measureF0(out, sr, latency + 8192);
+      const got = f0 / 120;
+      assert(Math.abs(got / ratio - 1) < 0.08,
+        `asked x${ratio}, measured x${got.toFixed(3)} (${f0.toFixed(1)}Hz)`);
+    }
+  });
+
+  /**
+   * Spectral centroid over the speech band.
+   *
+   * Used instead of hunting for a formant peak. Peak-picking needs to be told
+   * where to look and reports something confidently wrong when the peak is not
+   * there; the centroid moves with the whole envelope, which is exactly the
+   * quantity these two tests are about. Verified against the offline harness:
+   * a x1.16 formant setting moves it x1.15, and a pitch-only shift leaves it
+   * within 3%.
+   */
+  const centroid = (x, sr, from, lo = 200, hi = 6000) => {
+    const N = 4096;
+    const f = new FFT(N);
+    let num = 0;
+    let den = 0;
+    for (let w = 0; w < 6; w++) {
+      const re = new Float32Array(N);
+      const im = new Float32Array(N);
+      const at = from + w * (N / 2);
+      for (let i = 0; i < N; i++) {
+        re[i] = x[at + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+        im[i] = 0;
+      }
+      f.forward(re, im);
+      const binHz = sr / N;
+      for (let k = Math.round(lo / binHz); k <= Math.round(hi / binHz); k++) {
+        const m = Math.hypot(re[k], im[k]);
+        num += k * binHz * m;
+        den += m;
+      }
+    }
+    return den > 0 ? num / den : 0;
+  };
+
+  await check('pitch shifting alone leaves the formants where they were', () => {
+    // The chipmunk test, and the reason this module exists at all: a naive
+    // shifter drags the vocal-tract resonances up with the pitch, and every
+    // listener hears that instantly. With formant at 1 they must not move.
+    const dry = runDsp({ pitch: 1, formant: 1 });
+    const up = runDsp({ pitch: 1.6, formant: 1 });
+    const down = runDsp({ pitch: 0.7, formant: 1 });
+    const a = centroid(dry.out, dry.sr, dry.latency + 8192);
+    const b = centroid(up.out, up.sr, up.latency + 8192);
+    const c = centroid(down.out, down.sr, down.latency + 8192);
+    assert(b / a > 0.88 && b / a < 1.14,
+      `x1.6 pitch moved the spectrum x${(b / a).toFixed(2)} - formants are tracking pitch`);
+    assert(c / a > 0.88 && c / a < 1.14,
+      `x0.7 pitch moved the spectrum x${(c / a).toFixed(2)} - formants are tracking pitch`);
+    return `centroid x${(b / a).toFixed(2)} up, x${(c / a).toFixed(2)} down`;
+  });
+
+  await check('formant shifting moves the spectrum by its own ratio', () => {
+    // The mirror of the test above: proves it is capable of failing rather
+    // than being satisfied by any input at all.
+    const dry = runDsp({ pitch: 1, formant: 1 });
+    const a = centroid(dry.out, dry.sr, dry.latency + 8192);
+    for (const ratio of [1.4, 0.75]) {
+      const wet = runDsp({ pitch: 1, formant: ratio });
+      const got = centroid(wet.out, wet.sr, wet.latency + 8192) / a;
+      assert(Math.abs(got / ratio - 1) < 0.22,
+        `asked for formant x${ratio}, spectrum moved x${got.toFixed(2)}`);
+    }
+  });
+
+  await check('every preset keeps formants far closer to 1 than pitch', () => {
+    for (const [name, p] of Object.entries(PRESETS)) {
+      if (name === 'off') continue;
+      const pitchAway = Math.abs(Math.log(p.pitch));
+      const formantAway = Math.abs(Math.log(p.formant));
+      assert(formantAway < pitchAway,
+        `preset "${name}" moves formants (x${p.formant}) as much as pitch (x${p.pitch})`);
+    }
+  });
+
+  await check('the worklet module loads in the real renderer', async () => {
+    // Catches the bundle being stale or missing, which no unit test would:
+    // the DSP is bundled separately because an AudioWorklet cannot import.
+    const ctx = new AudioContext({ sampleRate: 48000 });
+    try {
+      // Resolved against the page (src/index.html), like the dynamic imports above.
+      await ctx.audioWorklet.addModule('../vendor/voice-worklet.js');
+      const node = new AudioWorkletNode(ctx, 'voice-changer', { outputChannelCount: [1] });
+      assert(node, 'node was not created');
+      node.disconnect();
+      return 'registered as "voice-changer"';
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  await check('voicefx reports its configuration back', () => {
+    const before = voicefx.getConfig();
+    const c = voicefx.configure({ enabled: true, pitch: 1.5, formant: 1.1 });
+    assert(c.enabled === true && c.pitch === 1.5 && c.formant === 1.1, 'config did not stick');
+    voicefx.configure(before);
+  });
+
   phone.disconnect();
 
   /** Collect registration events until a terminal one, or time out. */

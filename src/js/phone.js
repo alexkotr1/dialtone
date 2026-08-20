@@ -13,6 +13,8 @@
 
 import { normalise } from './format.js';
 
+import * as voicefx from './voicefx.js';
+
 const JsSIP = window.JsSIP;
 
 /** JsSIP logs every SIP message at debug level. Useful when a registration
@@ -47,6 +49,8 @@ let session = null;
 let audioEl = null;
 let settings = {};
 let durationTimer = null;
+/** True between opening the microphone and ua.call() actually running. */
+let dialing = false;
 
 /**
  * How long a connection attempt may sit in "connecting" before we call it.
@@ -407,6 +411,9 @@ function wireSession(s, direction) {
       failed: !!failed,
     };
     session = null;
+    // The stream was handed to JsSIP ready-made, so JsSIP will not stop it -
+    // without this the microphone stays open after every call.
+    voicefx.release();
     call.status = 'ended';
     call.lastError = failed ? summary.cause : '';
     publish();
@@ -426,33 +433,93 @@ export function dial(number, name = '') {
   if (!ua || !ua.isRegistered()) return 'Not registered — check Settings.';
   if (session) return 'Already on a call.';
 
-  try {
-    const s = ua.call(`sip:${target}@${(settings.domain || '').trim()}`, {
-      mediaConstraints: mediaConstraints(),
-      pcConfig: { iceServers: iceServers() },
-      rtcOfferConstraints: { offerToReceiveAudio: true, offerToReceiveVideo: false },
+  if (dialing) return 'Already dialling.';
+
+  // Opening the microphone is async, so the call is placed in a callback.
+  // ua.call still fires newRTCSession synchronously once it runs, so the
+  // session is adopted exactly as before - only later by a few hundred
+  // milliseconds, which is the cost of having the transformed stream ready
+  // before the first packet rather than swapping it in mid-call.
+  dialing = true;
+  voicefx
+    .capture(mediaConstraints())
+    .then((stream) => {
+      if (!dialing) {
+        // Cancelled while the microphone was opening.
+        voicefx.release();
+        return;
+      }
+      dialing = false;
+      const s = ua.call(`sip:${target}@${(settings.domain || '').trim()}`, {
+        mediaStream: stream,
+        // audio must not be false here: JsSIP strips the audio tracks from a
+        // supplied stream when it is, which would place a silent call.
+        mediaConstraints: { audio: true, video: false },
+        pcConfig: { iceServers: iceServers() },
+        rtcOfferConstraints: { offerToReceiveAudio: true, offerToReceiveVideo: false },
+      });
+      if (!s) {
+        voicefx.release();
+        fire('dialfailed', 'Could not start the call.');
+        return;
+      }
+      if (name) {
+        call.name = name;
+        publish();
+      }
+    })
+    .catch((err) => {
+      dialing = false;
+      voicefx.release();
+      fire('dialfailed', micError(err));
     });
-    // ua.call fires newRTCSession synchronously, which is where the session
-    // is adopted; this only fills in the name we already know from contacts.
-    if (name) {
-      call.name = name;
-      publish();
-    }
-    return s ? null : 'Could not start the call.';
-  } catch (err) {
-    return err?.message || 'Could not start the call.';
-  }
+  return null;
+}
+
+/** getUserMedia rejections are DOMExceptions whose names carry the meaning. */
+function micError(err) {
+  const n = err && err.name;
+  if (n === 'NotAllowedError') return 'Microphone access was refused.';
+  if (n === 'NotFoundError') return 'No microphone was found.';
+  if (n === 'NotReadableError') return 'The microphone is in use by another app.';
+  return (err && err.message) || 'Could not open the microphone.';
 }
 
 export function answer() {
   if (!session) return;
-  session.answer({
-    mediaConstraints: mediaConstraints(),
-    pcConfig: { iceServers: iceServers() },
-  });
+  const s = session;
+  voicefx
+    .capture(mediaConstraints())
+    .then((stream) => {
+      if (session !== s) {
+        // Caller gave up while the microphone was opening.
+        voicefx.release();
+        return;
+      }
+      s.answer({
+        mediaStream: stream,
+        mediaConstraints: { audio: true, video: false },
+        pcConfig: { iceServers: iceServers() },
+      });
+    })
+    .catch((err) => {
+      voicefx.release();
+      fire('dialfailed', micError(err));
+      try {
+        s.terminate({ status_code: 480, reason_phrase: 'Media Unavailable' });
+      } catch {
+        /* already gone */
+      }
+    });
 }
 
 export function hangup() {
+  // Cancels a dial that is still waiting on the microphone.
+  if (dialing) {
+    dialing = false;
+    voicefx.release();
+    return;
+  }
   if (!session) return;
   try {
     // Declining a call that was never answered is a rejection, not a BYE.

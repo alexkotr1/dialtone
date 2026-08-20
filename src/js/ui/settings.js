@@ -5,6 +5,8 @@ import * as phone from '../phone.js';
 import { meterMic, playDtmf, ringtone } from '../audio.js';
 import { toast } from './toast.js';
 import { modal } from './modal.js';
+import * as voicefx from '../voicefx.js';
+import { PRESETS } from '../dsp/voicechanger.js';
 
 let root = null;
 let actions = {};
@@ -19,6 +21,26 @@ const STATUS_TEXT = {
   registered: 'Registered',
   failed: 'Not connected',
 };
+
+let showVoicePitch = null;
+let showVoiceFormant = null;
+let showVoiceBright = null;
+
+/** Push the stored voice settings into the audio path. */
+function applyVoice() {
+  voicefx.configure({
+    enabled: !!state.settings.voiceEnabled,
+    pitch: state.settings.voicePitch,
+    formant: state.settings.voiceFormant,
+    brightness: state.settings.voiceBrightness,
+  });
+}
+
+function showVoice() {
+  showVoicePitch?.();
+  showVoiceFormant?.();
+  showVoiceBright?.();
+}
 
 export function init(el, api) {
   root = el;
@@ -153,6 +175,74 @@ function build() {
               <input type="range" class="slider" id="setToneVol" min="0" max="100" step="1" />
               <div class="help">
                 Dialpad key tones and the note that plays when a call ends.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <header>
+            <div>
+              <h3>Voice</h3>
+              <p>Changes how you sound to the other person. Never how they sound to you.</p>
+            </div>
+          </header>
+          <div class="card-body">
+            <label class="switch" id="setVoiceEnabled">
+              <div>
+                <div style="font-size:13px;font-weight:600">Transform my voice</div>
+                <div class="help">
+                  Applied to outgoing audio only, and only on calls started after it is
+                  switched on.
+                </div>
+              </div>
+              <span class="track"><span class="thumb"></span></span>
+            </label>
+
+            <div class="field">
+              <label for="setVoicePreset">Voice</label>
+              <select class="input" id="setVoicePreset">
+                <option value="higher">Higher</option>
+                <option value="higherSoft">Higher, subtle</option>
+                <option value="lower">Lower</option>
+                <option value="lowerSoft">Lower, subtle</option>
+                <option value="disguise">Disguised (same range)</option>
+                <option value="custom">Custom</option>
+              </select>
+              <div class="help">
+                &ldquo;Disguised&rdquo; keeps your pitch close to normal and changes the
+                timbre, which is the least noticeable option to someone who does not know
+                you and the most effective against someone who does.
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="setVoicePitch">Pitch <span class="vol-val" id="setVoicePitchVal"></span></label>
+              <input type="range" class="slider" id="setVoicePitch" min="60" max="200" step="1" />
+              <div class="help">How high the voice reads.</div>
+            </div>
+
+            <div class="field">
+              <label for="setVoiceFormant">Size <span class="vol-val" id="setVoiceFormantVal"></span></label>
+              <input type="range" class="slider" id="setVoiceFormant" min="70" max="150" step="1" />
+              <div class="help">
+                How large the speaker reads &mdash; it moves the resonances of the throat and
+                mouth. Keep it much closer to 100% than the pitch: moving both together by
+                the same amount is exactly what makes a voice sound like a cartoon.
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="setVoiceBright">Brightness <span class="vol-val" id="setVoiceBrightVal"></span></label>
+              <input type="range" class="slider" id="setVoiceBright" min="-40" max="40" step="1" />
+              <div class="help">Tilts the tone brighter or darker. A little goes a long way.</div>
+            </div>
+
+            <div class="field">
+              <button class="btn" id="setVoiceTest">Record and play back</button>
+              <div class="help" id="setVoiceTestHelp">
+                Records three seconds and plays it back exactly as the other person would
+                hear it. Use headphones, or it will record your own playback.
               </div>
             </div>
           </div>
@@ -384,6 +474,85 @@ function wire() {
     callPopup.classList.toggle('on', next);
   };
 
+  // --- voice ---------------------------------------------------------------
+
+  const vEnabled = root.querySelector('#setVoiceEnabled');
+  vEnabled.onclick = () => {
+    const next = !state.settings.voiceEnabled;
+    saveSettings({ voiceEnabled: next });
+    vEnabled.classList.toggle('on', next);
+    applyVoice();
+    if (next && phone.call.active) {
+      toast('The new voice starts on your next call.', 'ok');
+    }
+  };
+
+  const vPreset = root.querySelector('#setVoicePreset');
+  vPreset.onchange = () => {
+    const key = vPreset.value;
+    const preset = PRESETS[key];
+    if (!preset) {
+      // "Custom" keeps whatever the sliders are already at.
+      saveSettings({ voicePreset: 'custom' });
+      return;
+    }
+    saveSettings({
+      voicePreset: key,
+      voicePitch: preset.pitch,
+      voiceFormant: preset.formant,
+      voiceBrightness: preset.brightness,
+    });
+    showVoice();
+    applyVoice();
+  };
+
+  // Sliders carry percentages; the DSP wants ratios.
+  const wireVoice = (sel, key, toValue) => {
+    const el = root.querySelector(sel);
+    const out = root.querySelector(sel + 'Val');
+    const show = () => {
+      const pct = Number(el.value);
+      out.textContent = key === 'voiceBrightness' ? `${pct > 0 ? '+' : ''}${pct}` : `${pct}%`;
+    };
+    el.oninput = () => {
+      show();
+      // Moving any slider means the preset no longer describes the settings.
+      saveSettings({ [key]: toValue(Number(el.value)), voicePreset: 'custom' });
+      vPreset.value = 'custom';
+      applyVoice();
+    };
+    return show;
+  };
+  showVoicePitch = wireVoice('#setVoicePitch', 'voicePitch', (v) => v / 100);
+  showVoiceFormant = wireVoice('#setVoiceFormant', 'voiceFormant', (v) => v / 100);
+  showVoiceBright = wireVoice('#setVoiceBright', 'voiceBrightness', (v) => v / 100);
+
+  const vTest = root.querySelector('#setVoiceTest');
+  const vTestHelp = root.querySelector('#setVoiceTestHelp');
+  const vTestText = vTestHelp.textContent;
+  vTest.onclick = async () => {
+    if (vTest.disabled) return;
+    vTest.disabled = true;
+    try {
+      await voicefx.preview({
+        seconds: 3,
+        deviceId: state.settings.micDeviceId,
+        onPhase: (phase) => {
+          vTest.textContent =
+            phase === 'recording' ? 'Listening...' : phase === 'playing' ? 'Playing back' : 'Record and play back';
+          vTestHelp.textContent =
+            phase === 'recording' ? 'Say something. Three seconds.' : vTestText;
+        },
+      });
+    } catch (err) {
+      toast(err?.name === 'NotAllowedError' ? 'Microphone access was refused.' : 'Could not use the microphone.', 'error');
+    } finally {
+      vTest.disabled = false;
+      vTest.textContent = 'Record and play back';
+      vTestHelp.textContent = vTestText;
+    }
+  };
+
   // --- backup ------------------------------------------------------------
 
   const exportPw = root.querySelector('#setExportPassword');
@@ -508,6 +677,22 @@ export function refresh() {
   root.querySelector('#setAuto').classList.toggle('on', !!state.settings.autoConnect);
   root.querySelector('#setKeepTray').classList.toggle('on', !!state.settings.keepInTray);
   root.querySelector('#setCallPopup').classList.toggle('on', !!state.settings.callPopup);
+  root.querySelector('#setVoiceEnabled').classList.toggle('on', !!state.settings.voiceEnabled);
+
+  const vp = root.querySelector('#setVoicePreset');
+  if (vp && document.activeElement !== vp) vp.value = state.settings.voicePreset || 'custom';
+  const voiceSliders = [
+    ['#setVoicePitch', 'voicePitch', 1.62],
+    ['#setVoiceFormant', 'voiceFormant', 1.16],
+    ['#setVoiceBright', 'voiceBrightness', 0.14],
+  ];
+  for (const [sel, key, dflt] of voiceSliders) {
+    const el = root.querySelector(sel);
+    if (el && document.activeElement !== el) {
+      el.value = String(Math.round((state.settings[key] ?? dflt) * 100));
+    }
+  }
+  showVoice();
 
   const ring = root.querySelector('#setRingVol');
   const tone = root.querySelector('#setToneVol');
