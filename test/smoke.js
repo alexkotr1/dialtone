@@ -500,6 +500,64 @@
     }
   });
 
+  await check('silence in, silence out', () => {
+    // A phone call is mostly silence. NaN here would not be a quiet call, it
+    // would be a dead one: a single non-finite sample poisons the encoder.
+    const vc = new VoiceChanger(48000);
+    vc.setParams({ pitch: 1.62, formant: 1.16 });
+    const n = 24000;
+    const out = new Float32Array(n);
+    vc.process(new Float32Array(n), out);
+    let peak = 0;
+    for (let i = 0; i < n; i++) {
+      assert(Number.isFinite(out[i]), `non-finite sample at ${i}`);
+      peak = Math.max(peak, Math.abs(out[i]));
+    }
+    assert(peak < 1e-6, `silence produced ${peak}`);
+  });
+
+  await check('survives odd block sizes and a mid-call parameter change', () => {
+    // AudioWorklet delivers 128 frames, but nothing in the DSP may depend on
+    // that, and the Settings sliders retune the processor while it runs.
+    const vc = new VoiceChanger(48000);
+    const n = 30000;
+    const inp = new Float32Array(n);
+    for (let i = 0; i < n; i++) inp[i] = 0.4 * Math.sin((2 * Math.PI * 140 * i) / 48000);
+    const out = new Float32Array(n);
+    const sizes = [1, 7, 113, 257, 64, 999];
+    let i = 0;
+    let k = 0;
+    while (i < n) {
+      const len = Math.min(sizes[k++ % sizes.length], n - i);
+      if (k % 5 === 0) vc.setParams({ pitch: 0.7 + (k % 7) * 0.15, formant: 0.9 + (k % 3) * 0.1 });
+      vc.process(inp.subarray(i, i + len), out.subarray(i, i + len));
+      i += len;
+    }
+    for (let j = 0; j < n; j++) assert(Number.isFinite(out[j]), `non-finite at ${j}`);
+  });
+
+  await check('reset clears state, so one call cannot bleed into the next', () => {
+    const vc = new VoiceChanger(48000);
+    vc.setParams({ pitch: 1.62, formant: 1.16 });
+    const n = 20000;
+    const inp = new Float32Array(n);
+    for (let i = 0; i < n; i++) inp[i] = 0.4 * Math.sin((2 * Math.PI * 130 * i) / 48000);
+    const run = () => {
+      const out = new Float32Array(n);
+      for (let i = 0; i < n; i += 128) {
+        const len = Math.min(128, n - i);
+        vc.process(inp.subarray(i, i + len), out.subarray(i, i + len));
+      }
+      return out;
+    };
+    const a = run();
+    vc.reset();
+    const b = run();
+    let d = 0;
+    for (let i = 0; i < n; i++) d = Math.max(d, Math.abs(a[i] - b[i]));
+    assert(d < 1e-5, `output differed by ${d} after reset`);
+  });
+
   await check('every preset keeps formants far closer to 1 than pitch', () => {
     for (const [name, p] of Object.entries(PRESETS)) {
       if (name === 'off') continue;
