@@ -50,7 +50,9 @@ number. Avatar colours are derived from the name, so a person is the same
 colour every time.
 
 **Settings** — account, a live microphone level meter (the fastest way to
-answer "is it using the right mic?"), speaker selection, and theme.
+answer "is it using the right mic?"), speaker selection, separate volume
+sliders for the ringtone and the keypad tones (the ringtone previews itself
+when you let go of the slider), and theme.
 
 **Behaviour** — start with Windows (straight into the tray, no window); keep
 running in the tray when closed, so closing the window doesn't silently stop

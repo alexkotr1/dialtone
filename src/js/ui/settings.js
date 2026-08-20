@@ -2,7 +2,7 @@ import { icon } from '../icons.js';
 import { esc } from '../format.js';
 import { state, saveSettings, isConfigured, applyImport } from '../store.js';
 import * as phone from '../phone.js';
-import { meterMic } from '../audio.js';
+import { meterMic, playDtmf, ringtone } from '../audio.js';
 import { toast } from './toast.js';
 import { modal } from './modal.js';
 
@@ -10,6 +10,8 @@ let root = null;
 let actions = {};
 let stopMeter = null;
 let built = false;
+let showRingVol = null;
+let showToneVol = null;
 
 const STATUS_TEXT = {
   idle: 'Not connected',
@@ -135,6 +137,23 @@ function build() {
             <div class="field">
               <label for="setSpeaker">Speaker</label>
               <select class="input" id="setSpeaker"></select>
+            </div>
+
+            <div class="field">
+              <label for="setRingVol">Ringtone <span class="vol-val" id="setRingVolVal"></span></label>
+              <input type="range" class="slider" id="setRingVol" min="0" max="100" step="1" />
+              <div class="help">
+                The incoming ring, and the ringing tone you hear on outgoing calls.
+                Release the slider to hear it.
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="setToneVol">Keypad tones <span class="vol-val" id="setToneVolVal"></span></label>
+              <input type="range" class="slider" id="setToneVol" min="0" max="100" step="1" />
+              <div class="help">
+                Dialpad key tones and the note that plays when a call ends.
+              </div>
             </div>
           </div>
         </div>
@@ -301,6 +320,42 @@ function wire() {
   });
   root.querySelector('#setRefreshDevices').onclick = () => loadDevices(true);
 
+  // --- volumes -----------------------------------------------------------
+  //
+  // Applied live as the slider moves, so the preview on release is played at
+  // the level just chosen rather than the previously saved one.
+  const wireVolume = (id, key, preview) => {
+    const el = root.querySelector(id);
+    const label = root.querySelector(`${id}Val`);
+    const show = () => {
+      label.textContent = `${el.value}%`;
+    };
+    el.oninput = () => {
+      show();
+      saveSettings({ [key]: Number(el.value) / 100 });
+      actions.applyVolumes();
+    };
+    // 'change' fires once on release, unlike 'input'; a preview on every
+    // pixel of drag would be unbearable.
+    el.onchange = () => preview();
+    return show;
+  };
+
+  let stopPreview = null;
+  const previewRing = () => {
+    stopPreview?.();
+    stopPreview = ringtone();
+    // Long enough to hear the motif, short enough not to become the thing you
+    // are trying to escape.
+    setTimeout(() => {
+      stopPreview?.();
+      stopPreview = null;
+    }, 1800);
+  };
+
+  showRingVol = wireVolume('#setRingVol', 'ringVolume', previewRing);
+  showToneVol = wireVolume('#setToneVol', 'toneVolume', () => playDtmf('5'));
+
   // --- behaviour ---------------------------------------------------------
 
   const startup = root.querySelector('#setStartup');
@@ -453,6 +508,17 @@ export function refresh() {
   root.querySelector('#setAuto').classList.toggle('on', !!state.settings.autoConnect);
   root.querySelector('#setKeepTray').classList.toggle('on', !!state.settings.keepInTray);
   root.querySelector('#setCallPopup').classList.toggle('on', !!state.settings.callPopup);
+
+  const ring = root.querySelector('#setRingVol');
+  const tone = root.querySelector('#setToneVol');
+  if (ring && document.activeElement !== ring) {
+    ring.value = String(Math.round((state.settings.ringVolume ?? 0.6) * 100));
+    showRingVol?.();
+  }
+  if (tone && document.activeElement !== tone) {
+    tone.value = String(Math.round((state.settings.toneVolume ?? 0.6) * 100));
+    showToneVol?.();
+  }
   // Asked of the OS rather than read from our settings: the login item can be
   // removed in Task Manager without us hearing about it, and a toggle that
   // shows "on" for something Windows has disabled is worse than no toggle.

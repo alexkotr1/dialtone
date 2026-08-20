@@ -1,8 +1,12 @@
 /* The incoming-call popup.
  *
- * Lives in its own transparent, frameless window pinned to the bottom-right.
- * The window never moves — the card slides inside it — because transform is
- * composited on the GPU and stepping a window's bounds is not.
+ * Fills its own small, opaque window. The card used to slide within a larger
+ * transparent window under CSS transform — smoother in principle, and
+ * invisible in practice: a transparent Electron window on Windows is a
+ * layered window, and Chromium stops painting it the moment anything overlaps
+ * its rectangle. The window stayed topmost and drew nothing.
+ *
+ * The window slides instead, from main.js. This file just draws the card.
  */
 
 *,
@@ -16,7 +20,7 @@ body {
   margin: 0;
   width: 100%;
   height: 100%;
-  background: transparent;
+  background: var(--surface);
   overflow: hidden;
   font-family: var(--font);
   color: var(--text);
@@ -39,44 +43,16 @@ svg {
 
 .card {
   position: absolute;
-  right: 14px;
-  bottom: 14px;
-  width: 358px;
+  inset: 0;
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 12px;
-  padding: 13px 14px;
-  border-radius: var(--r-lg);
+  padding: 13px 15px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
-
-  /* Off to the right, past the window edge, until told otherwise. The extra
-     40px clears the shadow so nothing peeks out before the slide starts. */
-  transform: translateX(calc(100% + 40px));
-  opacity: 0;
-  transition:
-    transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 200ms ease-out;
-}
-
-.card.in {
-  transform: translateX(0);
-  opacity: 1;
-}
-
-/* Leaving is quicker than arriving: an exit that lingers reads as lag. */
-.card.out {
-  transform: translateX(calc(100% + 40px));
-  opacity: 0;
-  transition:
-    transform 240ms cubic-bezier(0.5, 0, 0.75, 0),
-    opacity 200ms ease-in 40ms;
-}
-
-:root[data-theme="light"] .card {
-  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.1);
+  /* No radius or shadow of our own: the window is opaque and the OS rounds
+     and shadows it. Drawing a rounded card inside a square window would show
+     the window's own corners behind it. */
 }
 
 .who {
@@ -212,11 +188,6 @@ svg {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card,
-  .card.in,
-  .card.out {
-    transition-duration: 1ms;
-  }
   .act.answer.ringing,
   .status .dot {
     animation: none;

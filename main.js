@@ -267,8 +267,21 @@ function createTray() {
 // slides within it via a CSS transform, which the compositor handles; nudging
 // a window's bounds sixty times a second does not look like the same thing.
 
-const TOAST_W = 400;
-const TOAST_H = 120;
+// Sized to the card itself. The window used to be larger than its content so
+// the card could slide within it under CSS transform — smoother in principle,
+// and unusable in practice. That needed `transparent: true`, and a transparent
+// Electron window on Windows is a layered window that Chromium stops painting
+// the moment anything overlaps it. The result was a window that reported
+// visible, held the topmost flag, won a hit-test at its own coordinates, and
+// showed nothing: you saw straight through to whatever was behind.
+//
+// So the window is opaque and the WINDOW slides. That is what Windows' own
+// notifications do, it is a handful of setBounds calls, and it is visible.
+const TOAST_W = 372;
+const TOAST_H = 84;
+/** Gap from the screen's working edges. */
+const TOAST_MARGIN = 16;
+const SLIDE_MS = 260;
 
 let toast = null;
 /** Resolves when the popup's page has loaded. Showing a window mid-load
@@ -277,63 +290,114 @@ let toastReady = null;
 /** Held so the popup can be re-rendered on reopen without waiting for the
  *  next per-second update from the renderer. */
 let toastCall = null;
+let slideTimer = null;
+let slideResolve = null;
+/** Serialises showToast: two call updates can arrive while the page is still
+ *  loading, and both would otherwise start their own slide. */
+let showingToast = null;
 
-function toastBounds() {
+function cancelSlide() {
+  clearInterval(slideTimer);
+  slideTimer = null;
+  if (slideResolve) {
+    const r = slideResolve;
+    slideResolve = null;
+    r();
+  }
+}
+
+/** Where the card rests, and where it starts/ends off-screen. */
+function toastAnchors() {
   // workArea, not bounds: it excludes the taskbar, so the popup sits above it
   // rather than under it.
   const { workArea } = screen.getPrimaryDisplay();
+  const y = workArea.y + workArea.height - TOAST_H - TOAST_MARGIN;
   return {
-    x: workArea.x + workArea.width - TOAST_W,
-    y: workArea.y + workArea.height - TOAST_H,
-    width: TOAST_W,
-    height: TOAST_H,
+    y,
+    shown: workArea.x + workArea.width - TOAST_W - TOAST_MARGIN,
+    hidden: workArea.x + workArea.width + 8,
   };
 }
 
 /**
  * Put the popup above everything, and keep it there.
  *
- * Three things are load-bearing here, learned the hard way — the popup was
- * only visible with the desktop showing:
+ * 'screen-saver', not 'floating': on Windows the lower levels do not reliably
+ * map to the WS_EX_TOPMOST band, so an ordinary maximised window covers it.
  *
- * 1. **'screen-saver', not 'floating'.** On Windows the lower levels do not
- *    reliably map to the WS_EX_TOPMOST band, so an ordinary maximised window
- *    covers the popup.
- * 2. **It must be re-asserted AFTER showInactive().** SW_SHOWNOINACTIVATE
- *    shows without activating, and in doing so puts the window at the bottom
- *    of the z-order — discarding topmost set before the show. Setting it in
- *    the constructor alone is not enough.
- * 3. **setVisibleOnAllWorkspaces**, so a call on virtual desktop 2 is not
- *    announced on desktop 1 where nobody is looking.
+ * Re-asserted AFTER showInactive(), not only in the constructor —
+ * SW_SHOWNOINACTIVATE shows without activating and in doing so drops the
+ * window down the z-order, discarding a topmost flag set beforehand.
  */
 function raiseToast() {
   if (!toast || toast.isDestroyed()) return;
   toast.setAlwaysOnTop(true, 'screen-saver');
-  // Windows has no concept of this and Electron documents it as a no-op
-  // there; calling it anyway was a suspect while debugging a window that
-  // would not appear, so it is scoped to the platforms that use it.
   if (process.platform !== 'win32') {
     toast.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   }
   toast.moveTop();
 }
 
+/** Slide the window between two x positions. Resolves when it arrives. */
+function slideToast(fromX, toX) {
+  return new Promise((resolve) => {
+    // Cancelling an in-flight slide must also settle its promise. Without
+    // this, whoever was awaiting the cancelled slide waits forever, and the
+    // popup is left parked wherever the animation was interrupted.
+    cancelSlide();
+    if (!toast || toast.isDestroyed()) return resolve();
+    slideResolve = resolve;
+    const { y } = toastAnchors();
+    const started = Date.now();
+    // Ease-out cubic: quick off the mark, settling at the end. A linear slide
+    // reads as mechanical at this distance.
+    const ease = (t) => 1 - Math.pow(1 - t, 3);
+
+    slideTimer = setInterval(() => {
+      if (!toast || toast.isDestroyed()) {
+        clearInterval(slideTimer);
+        slideTimer = null;
+        slideResolve = null;
+        return resolve();
+      }
+      const t = Math.min(1, (Date.now() - started) / SLIDE_MS);
+      const x = Math.round(fromX + (toX - fromX) * ease(t));
+      toast.setBounds({ x, y, width: TOAST_W, height: TOAST_H });
+      if (t >= 1) {
+        clearInterval(slideTimer);
+        slideTimer = null;
+        slideResolve = null;
+        resolve();
+      }
+    }, 16);
+  });
+}
+
 function createToast() {
   if (toast) return toast;
+  const { y, hidden } = toastAnchors();
   toast = new BrowserWindow({
-    ...toastBounds(),
+    x: hidden,
+    y,
+    width: TOAST_W,
+    height: TOAST_H,
     show: false,
     frame: false,
-    transparent: true,
-    // We draw the shadow in CSS; the OS one would trace the whole transparent
-    // window, including the empty area the card slides through.
-    hasShadow: false,
+    // Opaque, deliberately. `transparent: true` makes this a layered window
+    // that Chromium stops painting as soon as anything overlaps it — the
+    // window stays topmost and shows nothing. See the note on TOAST_W.
+    transparent: false,
+    backgroundColor: '#12151b',
+    // The OS shadow, since we no longer draw our own.
+    hasShadow: true,
+    roundedCorners: true,
     resizable: false,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
+    focusable: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload-toast.js'),
       contextIsolation: true,
@@ -341,7 +405,12 @@ function createToast() {
       backgroundThrottling: false,
     },
   });
-  raiseToast();
+  // Deliberately NOT raised here. raiseToast() calls moveTop(), which SHOWS a
+  // window that was created hidden — and this one is created parked off-screen
+  // to the right. The result is a window that reports visible from the moment
+  // it exists, so the show path below concludes it is already up and never
+  // slides it into view. It then sits off the edge of the screen for the whole
+  // call. Raising happens after showInactive(), where it belongs.
   toastReady = new Promise((resolve) => {
     toast.webContents.once('did-finish-load', resolve);
   });
@@ -359,42 +428,47 @@ function appIsInForeground() {
 }
 
 /**
- * Show the popup, once its page is actually loaded.
+ * Show the popup and slide it in from the right edge.
  *
- * Showing a window that is still loading is how it ends up with the topmost
- * flag set, correct bounds, and `isVisible() === false` — which looks
- * identical to a z-order problem and is not one. The window is created at
- * startup so in practice this promise is long since resolved by the time the
- * phone rings; awaiting it is what makes the very first call behave like
- * every other one.
+ * The page has to be loaded before the window is shown. Showing one mid-load
+ * gives a window with the topmost flag, the right bounds, and nothing drawn
+ * in it — which looks exactly like a z-order fault and is not one.
  */
 async function showToast(call) {
+  // Serialised. `toast:sync` fires on every call update, and the first two
+  // can both arrive before the popup's page has finished loading — each then
+  // starts its own slide, one cancels the other, and the window is left
+  // parked off-screen where the interrupted animation stopped.
+  showingToast = Promise.resolve(showingToast).then(() => showToastNow(call));
+  return showingToast;
+}
+
+async function showToastNow(call) {
   toastCall = call;
   const t = createToast();
   await toastReady;
   if (!toast || toast.isDestroyed()) return;
 
-  // Show FIRST, then send the state. The other order looks correct and is
-  // not: the renderer reveals the card on a requestAnimationFrame, and
-  // Chromium does not run those for a window that is not on screen yet. The
-  // window would appear — visible, topmost, right bounds — containing a card
-  // still parked off-screen at opacity 0. Because the window is transparent,
-  // that is indistinguishable from a z-order bug: you see straight through to
-  // whatever is behind it.
-  if (!t.isVisible()) {
-    t.setBounds(toastBounds());
-    // showInactive, not show: raising the popup must not steal focus from
-    // whatever the person is typing into. They can still click it.
-    t.showInactive();
-  }
-  raiseToast();
-
+  // Content first, so the card is painted before the window is on screen and
+  // the slide does not reveal an empty rectangle.
   t.webContents.send('toast:theme', readJson(paths().settings, {}).theme || 'dark');
   t.webContents.send('toast:call', call);
-  // After the show, never before — see raiseToast(). Also re-asserted when
-  // the popup is already up, in case something has since been promoted above
-  // it.
-  raiseToast();
+
+  const { y, shown, hidden } = toastAnchors();
+  // Visibility alone is not enough to know whether the popup is on screen —
+  // it can be visible and parked off the right edge. Ask where it actually is.
+  const onScreen = t.isVisible() && t.getBounds().x <= shown + 2;
+  if (!onScreen) {
+    t.setBounds({ x: hidden, y, width: TOAST_W, height: TOAST_H });
+    // showInactive, not show: the popup must not steal focus from whatever
+    // the person is typing into. They can still click it.
+    t.showInactive();
+    raiseToast();
+    await slideToast(hidden, shown);
+    raiseToast();
+  } else {
+    raiseToast();
+  }
 
   if (DEV) {
     console.log(
@@ -409,11 +483,16 @@ function updateToast(call) {
   if (toast && toast.isVisible()) toast.webContents.send('toast:call', call);
 }
 
-/** Ask the popup to slide out. It reports back when the animation is done,
- *  and only then is the window hidden. */
-function dismissToast() {
+/** Slide the popup back out to the right, then hide it.
+ *
+ *  Hidden rather than closed: recreating the window per call would reload the
+ *  page each time, and the first slide would stutter. */
+async function dismissToast() {
   toastCall = null;
-  if (toast && toast.isVisible()) toast.webContents.send('toast:dismiss');
+  if (!toast || toast.isDestroyed() || !toast.isVisible()) return;
+  const { shown, hidden } = toastAnchors();
+  await slideToast(shown, hidden);
+  if (toast && !toast.isDestroyed()) toast.hide();
 }
 
 /** Render the window to a PNG and quit. Dev-only; see SHOT above. */

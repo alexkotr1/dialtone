@@ -266,6 +266,12 @@ Settings → Behaviour:
 - **Keep running in the tray when closed** — on by default, and worth leaving
   on: a softphone that quits when you close its window silently stops taking
   calls. Quit from the tray icon.
+Settings → Audio also has separate volume sliders for the **ringtone** (the
+incoming ring and the ringing tone on outgoing calls) and the **keypad tones**.
+The ringtone plays a short preview when you release its slider, so you can set
+it by ear rather than by guessing. Both default to the level these sounds
+always had.
+
 - **Show a call popup** — on by default. When a call arrives and Dialtone is
   not the window in front, a small card slides in at the bottom-right with the
   caller's name, Answer and Decline. Answering turns it into a live timer; it

@@ -23,6 +23,9 @@ const DEFAULT_SETTINGS = {
   keepInTray: true,
   /** Show the corner popup when a call arrives and the app is not in front. */
   callPopup: true,
+  /** Output levels, 0..1. 0.6 is the loudness these sounds always had. */
+  ringVolume: 0.6,
+  toneVolume: 0.6,
 };
 
 const listeners = new Set();

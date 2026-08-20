@@ -1600,3 +1600,57 @@ select.input {
     transform: translateY(6px);
   }
 }
+
+/* ------------------------------------------------------------- sliders */
+
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  background: none;
+  cursor: pointer;
+}
+
+/* The track is drawn on the thumb's pseudo-element in Chromium, so both
+   halves have to be styled separately; there is no cross-browser shorthand. */
+.slider::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  /* Half the thumb's height above the 5px track, minus its border. */
+  margin-top: -7px;
+  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+
+.slider:hover::-webkit-slider-thumb {
+  background: var(--accent-hover);
+  transform: scale(1.12);
+}
+.slider:active::-webkit-slider-thumb {
+  transform: scale(0.95);
+}
+.slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+/* The live percentage next to the label. Tabular so the label does not
+   twitch as the digits change while dragging. */
+.vol-val {
+  font-weight: 500;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  margin-left: 4px;
+}

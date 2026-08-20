@@ -8,7 +8,7 @@ import { icon } from './icons.js';
 import * as store from './store.js';
 import { state } from './store.js';
 import * as phone from './phone.js';
-import { endTone, ringback, ringtone } from './audio.js';
+import { endTone, ringback, ringtone, setVolumes } from './audio.js';
 import { duration, esc, sameNumber } from './format.js';
 
 import * as dialer from './ui/dialer.js';
@@ -88,6 +88,12 @@ function updateMissedBadge() {
 }
 
 // ----------------------------------------------------------------- theme
+
+/** Push the saved levels into the audio layer. Called at startup and
+ *  whenever a slider moves. */
+export function applyVolumes() {
+  setVolumes({ ring: state.settings.ringVolume, tone: state.settings.toneVolume });
+}
 
 function applyTheme() {
   const choice = state.settings.theme || 'dark';
@@ -294,12 +300,14 @@ async function main() {
     .addEventListener('change', () => state.settings.theme === 'system' && applyTheme());
 
   buildRail();
+  applyVolumes();
   phone.attachAudioElement(document.getElementById('remoteAudio'));
 
   const shared = {
     placeCall,
     connect,
     applyTheme,
+    applyVolumes,
     openContact: (id) => {
       go('contacts');
       contacts.select(id);

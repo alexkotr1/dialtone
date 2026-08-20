@@ -12,6 +12,27 @@
 
 let ctx = null;
 
+/**
+ * Output levels, 0..1, from Settings.
+ *
+ * The MAX_* constants below are the amplitude each sound reaches at a setting
+ * of 1.0. They are chosen so the default of 0.6 reproduces exactly the levels
+ * these sounds had before there were sliders — turning the feature on changes
+ * nothing until someone moves a slider, and the top of the range is genuinely
+ * louder rather than merely "current".
+ */
+let volumes = { ring: 0.6, tone: 0.6 };
+
+const MAX_DTMF = 0.15;
+const MAX_RINGBACK = 0.09;
+const MAX_RINGTONE = 0.12;
+const MAX_END = 0.1;
+
+export function setVolumes(next) {
+  volumes = { ...volumes, ...next };
+}
+
+
 /** The context is created on the first real gesture, because a context made
  *  before one starts suspended and every later sound is silently dropped. */
 function audio() {
@@ -32,13 +53,15 @@ const DTMF = {
 export function playDtmf(key, ms = 120) {
   const pair = DTMF[key];
   if (!pair) return;
+  const level = MAX_DTMF * volumes.tone;
+  if (level <= 0) return;
   const ac = audio();
   const gain = ac.createGain();
   gain.connect(ac.destination);
   const t = ac.currentTime;
   gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(0.09, t + 0.012);
-  gain.gain.setValueAtTime(0.09, t + ms / 1000 - 0.02);
+  gain.gain.linearRampToValueAtTime(level, t + 0.012);
+  gain.gain.setValueAtTime(level, t + ms / 1000 - 0.02);
   // Ramped down rather than stopped dead: an abrupt cut is an audible click.
   gain.gain.linearRampToValueAtTime(0, t + ms / 1000);
   for (const f of pair) {
@@ -53,6 +76,7 @@ export function playDtmf(key, ms = 120) {
 
 /** A looping tone pattern, used for both ringback and the incoming ring. */
 function loop({ notes, period, volume }) {
+  if (volume <= 0) return () => {};
   const ac = audio();
   let stopped = false;
   let timer = null;
@@ -94,7 +118,7 @@ export function ringback() {
   return loop({
     notes: [{ at: 0, dur: 1.6, freqs: [440, 480] }],
     period: 5000,
-    volume: 0.055,
+    volume: MAX_RINGBACK * volumes.ring,
   });
 }
 
@@ -112,20 +136,22 @@ export function ringtone() {
       { at: 1.62, dur: 0.42, freqs: [880.0] },
     ],
     period: 3400,
-    volume: 0.07,
+    volume: MAX_RINGTONE * volumes.ring,
   });
 }
 
 /** Two short descending notes when the other side hangs up, so an ended call
  *  is audible without looking at the screen. */
 export function endTone() {
+  const level = MAX_END * volumes.tone;
+  if (level <= 0) return;
   const ac = audio();
   const t = ac.currentTime;
   [[440, 0], [330, 0.13]].forEach(([f, at]) => {
     const gain = ac.createGain();
     gain.connect(ac.destination);
     gain.gain.setValueAtTime(0, t + at);
-    gain.gain.linearRampToValueAtTime(0.06, t + at + 0.02);
+    gain.gain.linearRampToValueAtTime(level, t + at + 0.02);
     gain.gain.linearRampToValueAtTime(0, t + at + 0.14);
     const osc = ac.createOscillator();
     osc.type = 'sine';

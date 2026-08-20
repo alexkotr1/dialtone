@@ -12,15 +12,10 @@ import { duration, esc, hue, initials, prettyNumber } from './format.js';
 
 const api = window.dialtoneToast;
 
-const card = document.getElementById('card');
 const nameEl = document.getElementById('name');
 const statusEl = document.getElementById('status');
 const avatarEl = document.getElementById('avatar');
 const actionsEl = document.getElementById('actions');
-
-/** Whether the slide-in has been played, so a stream of updates does not
- *  restart the animation on every tick. */
-let shown = false;
 
 function avatar(name, seed) {
   const label = initials(name);
@@ -63,38 +58,17 @@ function render(call) {
 
 api.onCall((call) => {
   render(call);
-  if (!shown) {
-    shown = true;
-    card.classList.remove('out');
-    // Force a style flush so the browser has the card's off-screen position
-    // as a starting value, then change it — that is what makes the move a
-    // transition rather than an instant jump.
-    //
-    // Deliberately synchronous. The obvious version schedules this on a
-    // requestAnimationFrame, and Chromium does not run those for a window
-    // that is not on screen — leaving the card parked off-screen at opacity 0
-    // inside a transparent window, which looks exactly like the popup opening
-    // behind everything else.
-    void card.offsetWidth;
-    card.classList.add('in');
-  }
 });
 
 api.onTheme((theme) => {
   document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
 });
 
+// The slide-out is the window moving, driven from main; nothing to animate
+// here. The hook stays so main has a single place to hang teardown if the
+// card ever needs to change on the way out.
 api.onDismiss(() => {
-  shown = false;
-  card.classList.remove('in');
-  card.classList.add('out');
-  // Tell main once the card is actually off-screen so the window is hidden
-  // only after the animation, not during it.
-  const done = () => api.dismissed();
-  card.addEventListener('transitionend', done, { once: true });
-  // A window that never gets a transitionend — hidden tab, reduced motion —
-  // must not leave the popup stuck on screen.
-  setTimeout(done, 500);
+  api.dismissed();
 });
 
 // Clicking the card (but not a button) brings the app forward.
