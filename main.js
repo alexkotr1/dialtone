@@ -627,7 +627,14 @@ ipcMain.handle('config:import', async () => {
  * first argument or the login item launches Electron's default page.
  */
 function loginItemOptions() {
-  return { path: process.execPath, args: [app.getAppPath(), '--tray'] };
+  // Packaged, execPath IS Dialtone.exe and takes --tray directly. Unpackaged,
+  // execPath is electron.exe and the app directory has to be the first
+  // argument or the login item launches Electron's default page instead.
+  // Passing the unpackaged form to an installed build points the login item
+  // at a path inside app.asar, which fails silently at every login.
+  return app.isPackaged
+    ? { path: process.execPath, args: ['--tray'] }
+    : { path: process.execPath, args: [app.getAppPath(), '--tray'] };
 }
 
 ipcMain.handle('startup:get', () => app.getLoginItemSettings(loginItemOptions()).openAtLogin);

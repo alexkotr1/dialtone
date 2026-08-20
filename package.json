@@ -2,7 +2,9 @@
   "name": "dialtone",
   "version": "1.0.0",
   "private": true,
-  "description": "A desktop softphone for FreeSWITCH — dialpad, recents, contacts.",
+  "description": "A desktop softphone for FreeSWITCH \u2014 dialpad, recents, contacts.",
+  "author": "alexk",
+  "license": "UNLICENSED",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -14,13 +16,16 @@
     "postinstall": "node node_modules/electron/install.js && npm run build:vendor",
     "build:icon": "electron tools/make-icon.js",
     "shortcut": "powershell -ExecutionPolicy Bypass -File tools/install-shortcut.ps1",
-    "build:vendor": "esbuild node_modules/jssip/lib/JsSIP.js --bundle --format=iife --global-name=JsSIP --outfile=vendor/jssip.js --platform=browser --target=chrome120"
+    "build:vendor": "esbuild node_modules/jssip/lib/JsSIP.js --bundle --format=iife --global-name=JsSIP --outfile=vendor/jssip.js --platform=browser --target=chrome120",
+    "dist": "npm run build:vendor && electron-builder --win",
+    "dist:dir": "npm run build:vendor && electron-builder --win --dir"
   },
   "dependencies": {
     "jssip": "^3.13.8"
   },
   "devDependencies": {
     "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.27.2"
   }
 }

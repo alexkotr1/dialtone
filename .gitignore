@@ -27,3 +27,7 @@ credentials.bin
 dialtone_vars.xml
 *secrets*
 .env
+
+# Packaged output (npm run dist). ~100MB per build; distribute via a release,
+# not the repo.
+dist/
