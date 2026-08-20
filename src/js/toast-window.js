@@ -65,15 +65,18 @@ api.onCall((call) => {
   render(call);
   if (!shown) {
     shown = true;
-    // Two frames: one for the browser to lay the card out at its start
-    // position, one for the class change to be seen as a transition rather
-    // than an initial style.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        card.classList.remove('out');
-        card.classList.add('in');
-      })
-    );
+    card.classList.remove('out');
+    // Force a style flush so the browser has the card's off-screen position
+    // as a starting value, then change it — that is what makes the move a
+    // transition rather than an instant jump.
+    //
+    // Deliberately synchronous. The obvious version schedules this on a
+    // requestAnimationFrame, and Chromium does not run those for a window
+    // that is not on screen — leaving the card parked off-screen at opacity 0
+    // inside a transparent window, which looks exactly like the popup opening
+    // behind everything else.
+    void card.offsetWidth;
+    card.classList.add('in');
   }
 });
 

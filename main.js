@@ -54,6 +54,10 @@ const FORCE_THEME = (() => {
 /** Launched by the login item: come up in the tray with no window. */
 const START_IN_TRAY = process.argv.includes('--tray');
 
+/** Dev only: show the call popup and stay running, so its z-order can be
+ *  inspected against other windows without placing a call for each attempt. */
+const TOAST_DEMO = process.argv.includes('--toast-demo');
+
 const SELFTEST = (() => {
   const i = process.argv.indexOf('--selftest');
   if (i < 0) return null;
@@ -267,6 +271,9 @@ const TOAST_W = 400;
 const TOAST_H = 120;
 
 let toast = null;
+/** Resolves when the popup's page has loaded. Showing a window mid-load
+ *  leaves it invisible with every other property looking correct. */
+let toastReady = null;
 /** Held so the popup can be re-rendered on reopen without waiting for the
  *  next per-second update from the renderer. */
 let toastCall = null;
@@ -281,6 +288,34 @@ function toastBounds() {
     width: TOAST_W,
     height: TOAST_H,
   };
+}
+
+/**
+ * Put the popup above everything, and keep it there.
+ *
+ * Three things are load-bearing here, learned the hard way — the popup was
+ * only visible with the desktop showing:
+ *
+ * 1. **'screen-saver', not 'floating'.** On Windows the lower levels do not
+ *    reliably map to the WS_EX_TOPMOST band, so an ordinary maximised window
+ *    covers the popup.
+ * 2. **It must be re-asserted AFTER showInactive().** SW_SHOWNOINACTIVATE
+ *    shows without activating, and in doing so puts the window at the bottom
+ *    of the z-order — discarding topmost set before the show. Setting it in
+ *    the constructor alone is not enough.
+ * 3. **setVisibleOnAllWorkspaces**, so a call on virtual desktop 2 is not
+ *    announced on desktop 1 where nobody is looking.
+ */
+function raiseToast() {
+  if (!toast || toast.isDestroyed()) return;
+  toast.setAlwaysOnTop(true, 'screen-saver');
+  // Windows has no concept of this and Electron documents it as a no-op
+  // there; calling it anyway was a suspect while debugging a window that
+  // would not appear, so it is scoped to the platforms that use it.
+  if (process.platform !== 'win32') {
+    toast.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+  toast.moveTop();
 }
 
 function createToast() {
@@ -306,12 +341,14 @@ function createToast() {
       backgroundThrottling: false,
     },
   });
-  // 'floating' keeps it above ordinary windows without fighting screensavers
-  // or UAC prompts.
-  toast.setAlwaysOnTop(true, 'floating');
+  raiseToast();
+  toastReady = new Promise((resolve) => {
+    toast.webContents.once('did-finish-load', resolve);
+  });
   toast.loadFile(path.join(__dirname, 'src', 'toast.html'));
   toast.on('closed', () => {
     toast = null;
+    toastReady = null;
   });
   return toast;
 }
@@ -321,21 +358,49 @@ function appIsInForeground() {
   return !!win && win.isVisible() && !win.isMinimized() && win.isFocused();
 }
 
-function showToast(call) {
+/**
+ * Show the popup, once its page is actually loaded.
+ *
+ * Showing a window that is still loading is how it ends up with the topmost
+ * flag set, correct bounds, and `isVisible() === false` — which looks
+ * identical to a z-order problem and is not one. The window is created at
+ * startup so in practice this promise is long since resolved by the time the
+ * phone rings; awaiting it is what makes the very first call behave like
+ * every other one.
+ */
+async function showToast(call) {
   toastCall = call;
   const t = createToast();
-  const send = () => {
-    t.webContents.send('toast:theme', readJson(paths().settings, {}).theme || 'dark');
-    t.webContents.send('toast:call', call);
-  };
-  if (t.webContents.isLoading()) t.webContents.once('did-finish-load', send);
-  else send();
+  await toastReady;
+  if (!toast || toast.isDestroyed()) return;
 
+  // Show FIRST, then send the state. The other order looks correct and is
+  // not: the renderer reveals the card on a requestAnimationFrame, and
+  // Chromium does not run those for a window that is not on screen yet. The
+  // window would appear — visible, topmost, right bounds — containing a card
+  // still parked off-screen at opacity 0. Because the window is transparent,
+  // that is indistinguishable from a z-order bug: you see straight through to
+  // whatever is behind it.
   if (!t.isVisible()) {
     t.setBounds(toastBounds());
     // showInactive, not show: raising the popup must not steal focus from
     // whatever the person is typing into. They can still click it.
     t.showInactive();
+  }
+  raiseToast();
+
+  t.webContents.send('toast:theme', readJson(paths().settings, {}).theme || 'dark');
+  t.webContents.send('toast:call', call);
+  // After the show, never before — see raiseToast(). Also re-asserted when
+  // the popup is already up, in case something has since been promoted above
+  // it.
+  raiseToast();
+
+  if (DEV) {
+    console.log(
+      `[toast] visible=${t.isVisible()} topmost=${t.isAlwaysOnTop()} ` +
+        `bounds=${JSON.stringify(t.getBounds())}`
+    );
   }
 }
 
@@ -541,6 +606,27 @@ app.whenReady().then(async () => {
   // Not created during a screenshot or self-test run: a tray icon appearing
   // and vanishing for every capture is noise, and the process exits anyway.
   if (!SHOT && !SELFTEST) createTray();
+  // NOT created here. Building the popup at startup and leaving it hidden
+  // until the phone rings sounds better - the page is loaded, so showing it
+  // is instant - and produces a window that reports visible, topmost and
+  // correctly positioned while painting nothing at all. A transparent window
+  // that sits hidden loses its compositor surface, and because it is
+  // transparent you see straight through to whatever is behind: identical on
+  // screen to the popup opening underneath everything.
+  //
+  // Created per call instead, and awaited before showing. See showToast().
+
+  if (TOAST_DEMO) {
+    win.hide();
+    showToast({
+      active: true,
+      direction: 'in',
+      status: 'ringing',
+      number: '+302114443742',
+      name: 'Ada Lovelace',
+      seconds: 0,
+    });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
