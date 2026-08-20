@@ -5,12 +5,19 @@ the things a phone app does, on a PC.
 
 ![the keypad](shots/dialer.png)
 
-## Running it
+## Installing it
+
+Run **`Dialtone-Setup-<version>.exe`**. Electron, the app and JsSIP are all
+inside it — nothing else needs installing. Per-user, so no admin prompt.
+
+Or from source:
 
 ```bash
 npm install
 npm start
 ```
+
+`npm run dist` rebuilds the installer.
 
 First launch opens Settings, because there is nothing to dial with until an
 account is configured. Fill in the four fields, press **Save & connect**, and

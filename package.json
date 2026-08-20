@@ -2,7 +2,7 @@
   "name": "dialtone",
   "version": "1.0.0",
   "private": true,
-  "description": "A desktop softphone for FreeSWITCH \u2014 dialpad, recents, contacts.",
+  "description": "A desktop softphone for FreeSWITCH — dialpad, recents, contacts.",
   "author": "alexk",
   "license": "UNLICENSED",
   "main": "main.js",

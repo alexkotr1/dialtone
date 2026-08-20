@@ -160,12 +160,32 @@ docker logs dialtone-freeswitch 2>&1 | grep -i "error creating sip ua"
 
 ## Part 2 — the app
 
-### 2.1 Install
+### 2.1 Install — the easy way
+
+Run **`Dialtone-Setup-<version>.exe`**. That is the whole of it: the Electron
+runtime, the app and JsSIP are all inside the installer. **Nothing else needs
+installing — no Node, no npm.**
+
+It installs per-user, so there is no admin prompt, and it creates a Desktop
+and Start Menu shortcut. Uninstalling leaves your contacts and call history in
+`%APPDATA%\dialtone` alone; nothing is silently binned.
+
+> **Windows will warn you on first run** — "Windows protected your PC". The
+> installer is not code-signed, because a signing certificate costs money and
+> is tied to a verified identity, which is hard to justify for something you
+> install on your own machines. Click **More info → Run anyway**. If you would
+> rather not take that on trust, build it yourself from source below; it is
+> the same output.
+
+### 2.2 Install — from source
+
+For development, or to build the installer yourself:
 
 ```bash
-git clone <this repo> dialtone
+git clone https://github.com/alexkotr1/dialtone
 cd dialtone
 npm install
+npm start
 ```
 
 `npm install` also downloads the Electron binary and bundles JsSIP into
@@ -175,10 +195,11 @@ npm install
 node node_modules/electron/install.js
 ```
 
-### 2.2 Run it
+To produce the installer:
 
 ```bash
-npm start
+npm run dist        # -> dist/Dialtone-Setup-<version>.exe
+npm run dist:dir    # unpacked, for testing without installing
 ```
 
 First launch opens Settings, because there is nothing to dial with yet.
@@ -226,6 +247,8 @@ silence. Settings → Audio has a live level meter for exactly this — speak,
 and the bar should move.
 
 ### 2.5 Desktop shortcut
+
+The installer makes one. If you are running from source instead:
 
 ```powershell
 npm run shortcut
