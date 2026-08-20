@@ -1,0 +1,20 @@
+# Anything that runs on the Linux server must keep LF. A shell script with
+# CRLF fails as `$'\r': command not found`, which points at the wrong line and
+# reads like a syntax error in code that is fine.
+*.sh        text eol=lf
+*.py        text eol=lf
+*.xml       text eol=lf
+
+# PowerShell is the opposite case: Windows PowerShell 5.1 reads a .ps1 without
+# a BOM as Windows-1252, so a stray non-ASCII character can decode into a
+# smart quote and be treated as a string delimiter. Keep them CRLF and ASCII.
+*.ps1       text eol=crlf
+
+*.js        text
+*.json      text
+*.css       text
+*.html      text
+*.md        text
+
+*.png       binary
+*.ico       binary

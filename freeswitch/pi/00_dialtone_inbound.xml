@@ -1,0 +1,26 @@
+<include>
+  <!-- Anything arriving on this instance's trunk rings the softphone. This
+       instance has exactly one gateway and one user, so a catch-all is the
+       honest routing rather than a shortcut. -->
+  <extension name="dialtone_inbound">
+    <condition field="destination_number" expression="^.*$">
+      <action application="set" data="domain_name=$${domain}"/>
+
+      <!-- Pin the codecs offered TO the softphone.
+           Without this, FreeSWITCH offers the browser whatever the inbound
+           leg negotiated. From a loopback test that is L16/8000; from a real
+           G.711 trunk it is PCMU or PCMA. Chromium cannot do L16 at all, so
+           it answers with only telephone-event and no audio codec, and
+           FreeSWITCH hangs up with INCOMPATIBLE_DESTINATION — which looks
+           like a signalling fault and is really a codec one.
+
+           `nolocal:` matters: it applies the list to the leg being dialled
+           and NOT to the inbound trunk leg, which must stay free to be G.711.
+           Offering opus first costs a transcode and is worth it — the whole
+           point of a WebRTC softphone is that the last hop is wideband. -->
+      <action application="export" data="nolocal:absolute_codec_string=opus,PCMU,PCMA"/>
+
+      <action application="transfer" data="1005 XML default"/>
+    </condition>
+  </extension>
+</include>

@@ -1,0 +1,41 @@
+<!--
+  A directory user for Dialtone.
+
+  Install as:
+      /etc/freeswitch/directory/default/1005.xml
+      (or wherever your directory lives — alongside the stock 1000.xml)
+
+  Then, in fs_cli:
+      reloadxml
+
+  This is a *user*, not a gateway. Gateways are how FreeSWITCH registers
+  outward to a carrier; a softphone registers inward, which is a directory
+  user. Getting these two confused is the single most common reason a
+  softphone cannot connect to a FreeSWITCH that is otherwise working.
+
+  Change the password before using this. The stock FreeSWITCH default is
+  "1234" for every extension, which is fine on a lab box that nothing can
+  reach and a genuine problem the moment the SIP port is exposed.
+-->
+<include>
+  <user id="1005">
+    <params>
+      <!-- Both are needed. `password` is SIP digest auth (what Dialtone
+           sends); `vm-password` is the voicemail PIN and is unrelated. -->
+      <param name="password" value="CHANGEME"/>
+      <param name="vm-password" value="CHANGEME"/>
+    </params>
+
+    <variables>
+      <variable name="toll_allow" value="domestic,local"/>
+      <variable name="accountcode" value="1005"/>
+      <variable name="user_context" value="default"/>
+      <variable name="effective_caller_id_name" value="Dialtone"/>
+      <variable name="effective_caller_id_number" value="1005"/>
+      <!-- What the far end sees on an outbound call through a carrier. Set
+           these to a real DID you own, or calls will be rejected upstream. -->
+      <variable name="outbound_caller_id_name" value="$${outbound_caller_name}"/>
+      <variable name="outbound_caller_id_number" value="$${outbound_caller_id}"/>
+    </variables>
+  </user>
+</include>

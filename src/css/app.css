@@ -1,0 +1,1602 @@
+/* Layout and components. Tokens live in tokens.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+svg {
+  display: block;
+  flex: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--r-full);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+  background-clip: content-box;
+}
+
+/* ------------------------------------------------------------------ shell */
+
+#app {
+  display: grid;
+  grid-template-rows: var(--titlebar-h) 1fr;
+  height: 100%;
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  position: relative;
+  z-index: 40;
+}
+
+.titlebar .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+.titlebar .brand svg {
+  color: var(--accent);
+}
+
+.titlebar .spacer {
+  flex: 1;
+}
+
+.win-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+  height: 100%;
+}
+.win-controls button {
+  width: 46px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.win-controls button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.win-controls button.close:hover {
+  background: #e0443e;
+  color: #fff;
+}
+
+/* A call in progress must be visible from the titlebar, whatever view you
+   are on — otherwise it is possible to forget the line is open. */
+.call-pill {
+  -webkit-app-region: no-drag;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 6px 0 10px;
+  border-radius: var(--r-full);
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+.call-pill.on {
+  display: flex;
+}
+.call-pill:hover {
+  background: rgba(45, 190, 108, 0.22);
+}
+.call-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: currentColor;
+  animation: pulse 2s var(--ease) infinite;
+}
+.call-pill .end {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-full);
+  background: var(--red);
+  color: #fff;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.body {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  min-height: 0;
+  position: relative;
+}
+
+/* -------------------------------------------------------------------- rail */
+
+.rail {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 4px;
+}
+
+.rail-btn {
+  width: 58px;
+  height: 54px;
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  grid-template-rows: auto auto;
+  color: var(--text-3);
+  position: relative;
+  transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.rail-btn span {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.rail-btn:hover {
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+.rail-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+/* The active marker is a rail-edge bar rather than a border on the button:
+   it reads as "this pane", not "this button is pressed". */
+.rail-btn.active::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 3px;
+  height: 22px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
+/* The UA stylesheet's `[hidden] { display: none }` is one class less specific
+   than the rule below, so without this the badge renders as an empty red dot
+   whenever there are no missed calls — permanently, and looking like an
+   unread count nobody can clear. */
+.rail-btn .badge[hidden] {
+  display: none;
+}
+
+.rail-btn .badge {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-full);
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--surface);
+}
+
+.rail .spacer {
+  flex: 1;
+}
+
+.rail-status {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  padding: 8px 0;
+  width: 58px;
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 600;
+  transition: background var(--fast) var(--ease);
+}
+.rail-status:hover {
+  background: var(--surface-2);
+}
+.rail-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--text-3);
+  box-shadow: 0 0 0 3px transparent;
+  transition: background var(--normal) var(--ease), box-shadow var(--normal) var(--ease);
+}
+.rail-status[data-state="registered"] .dot {
+  background: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+.rail-status[data-state="connecting"] .dot {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px var(--amber-soft);
+  animation: pulse 1.4s var(--ease) infinite;
+}
+.rail-status[data-state="failed"] .dot {
+  background: var(--red);
+  box-shadow: 0 0 0 3px var(--red-soft);
+}
+
+/* ------------------------------------------------------------------- views */
+
+.views {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.view {
+  position: absolute;
+  inset: 0;
+  display: none;
+  min-height: 0;
+}
+.view.active {
+  display: grid;
+  animation: viewIn var(--normal) var(--ease);
+}
+
+@keyframes viewIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Split views: a scrolling list next to a detail pane. */
+.split {
+  grid-template-columns: var(--list-w) 1fr;
+}
+
+.pane {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.pane-head {
+  padding: 18px 18px 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.pane-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pane-title h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.scroller {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 16px;
+}
+
+.detail {
+  overflow-y: auto;
+  background: var(--bg);
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ dialer */
+
+.dialer {
+  place-items: center;
+  align-content: center;
+  gap: 0;
+  padding: 12px 0 26px;
+  background: radial-gradient(120% 90% at 50% 0%, var(--surface) 0%, var(--bg) 62%);
+}
+
+.dial-display {
+  height: 92px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.dial-number {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+}
+
+.dial-number input {
+  background: none;
+  border: none;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  width: 340px;
+  padding: 0;
+  user-select: text;
+  cursor: text;
+}
+/* The placeholder sits in a 38px field but must not read as a headline —
+   it is a hint, and at full size it dominated the whole screen. */
+.dial-number input::placeholder {
+  color: var(--text-3);
+  font-size: 17px;
+  font-weight: 450;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+
+.backspace {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.backspace.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+.backspace:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.dial-hint {
+  font-size: 13px;
+  color: var(--text-2);
+  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dial-hint b {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 76px);
+  gap: 16px 26px;
+  margin: 10px 0 26px;
+}
+
+.key {
+  width: 76px;
+  height: 76px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  transition: transform 90ms var(--ease), background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.key .digit {
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 500;
+  line-height: 1;
+}
+.key .letters {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--text-3);
+  height: 11px;
+}
+/* "+" is a character you can actually dial, not a letter group, so it gets
+   its own weight rather than being set as if it were "ABC". */
+.key[data-key="0"] .letters {
+  font-size: 13px;
+  letter-spacing: 0;
+  line-height: 11px;
+}
+.key:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.key:active,
+.key.pressed {
+  transform: scale(0.93);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.call-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.call-btn {
+  width: 66px;
+  height: 66px;
+  border-radius: var(--r-full);
+  background: var(--green);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 18px rgba(45, 190, 108, 0.32);
+  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease), opacity var(--fast) var(--ease);
+}
+.call-btn:hover:not(:disabled) {
+  background: var(--green-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(45, 190, 108, 0.38);
+}
+.call-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+.call-btn:disabled {
+  opacity: 0.35;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.dial-foot {
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--text-3);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+kbd {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+
+/* -------------------------------------------------------------------- rows */
+
+.section-label {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 10px 18px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: linear-gradient(var(--surface) 72%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 18px;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--fast) var(--ease);
+}
+.row:hover {
+  background: var(--surface-hover);
+}
+.row.selected {
+  background: var(--accent-soft);
+}
+.row.selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
+.row .main {
+  min-width: 0;
+}
+.row .name {
+  font-weight: 550;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row .name.missed {
+  color: var(--red);
+}
+.row .sub {
+  font-size: 12px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row .meta {
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  transition: opacity var(--fast) var(--ease);
+}
+.row .quick {
+  position: absolute;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  background: var(--green);
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.row:hover .quick {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.row:hover .meta {
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------------ avatar */
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  font-weight: 650;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  color: #fff;
+  flex: none;
+  /* Hue comes from the name, so the same person is the same colour every
+     time — it becomes a recognition cue rather than decoration. */
+  background: linear-gradient(140deg, hsl(var(--h) 62% 52%), hsl(var(--h) 58% 40%));
+}
+.avatar.lg {
+  width: 92px;
+  height: 92px;
+  font-size: 33px;
+  border-radius: var(--r-full);
+}
+.avatar.xl {
+  width: 128px;
+  height: 128px;
+  font-size: 46px;
+}
+.avatar.unknown {
+  background: var(--surface-3);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+/* ------------------------------------------------------------------ inputs */
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+.field label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.field .help {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.help code,
+code {
+  font-family: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+  font-size: 0.94em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  user-select: text;
+}
+
+.input,
+select.input {
+  height: 38px;
+  padding: 0 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  user-select: text;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+  width: 100%;
+}
+.input::placeholder {
+  color: var(--text-3);
+}
+.input:hover {
+  border-color: var(--border-strong);
+}
+.input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  background: var(--surface-2);
+}
+select.input {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2398a2b3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6l4 4 4-4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+.input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-group .input {
+  padding-right: 40px;
+}
+.input-group .adorn {
+  position: absolute;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+.input-group .adorn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.search {
+  position: relative;
+}
+.search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.search .input {
+  padding-left: 34px;
+  border-radius: var(--r-full);
+}
+
+/* -------------------------------------------------------------------- switch */
+
+.switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+}
+.switch .track {
+  width: 40px;
+  height: 23px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  position: relative;
+  flex: none;
+  transition: background var(--normal) var(--ease), border-color var(--normal) var(--ease);
+}
+.switch .thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: var(--r-full);
+  background: var(--text-3);
+  transition: transform var(--normal) var(--ease), background var(--normal) var(--ease);
+}
+.switch.on .track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.switch.on .thumb {
+  transform: translateX(17px);
+  background: #fff;
+}
+
+/* ------------------------------------------------------------------ buttons */
+
+.btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
+    opacity var(--fast) var(--ease), transform var(--fast) var(--ease);
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+.btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.btn.success {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.btn.success:hover {
+  background: var(--green-hover);
+  border-color: var(--green-hover);
+}
+.btn.danger {
+  color: var(--red);
+  border-color: transparent;
+  background: var(--red-soft);
+}
+.btn.danger:hover {
+  background: rgba(240, 82, 75, 0.22);
+  border-color: transparent;
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+.btn.ghost:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.icon-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.icon-btn.on {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+}
+.chip {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface-3);
+  border: 1px solid transparent;
+  transition: all var(--fast) var(--ease);
+}
+.chip:hover {
+  color: var(--text);
+}
+.chip.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ detail */
+
+.detail-empty,
+.empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+  color: var(--text-3);
+}
+.empty .art,
+.detail-empty .art {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.empty h3,
+.detail-empty h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.empty p,
+.detail-empty p {
+  margin: 0;
+  font-size: 13px;
+  max-width: 280px;
+  line-height: 1.55;
+}
+
+.detail-card {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 36px 28px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-card h2 {
+  margin: 12px 0 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.detail-card .num {
+  color: var(--text-2);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+.detail-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+.action {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  width: 74px;
+  padding: 10px 0;
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.action:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.action .ring {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  transition: all var(--fast) var(--ease);
+}
+.action.call .ring {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+.action.call:hover .ring {
+  background: var(--green-hover);
+}
+.action.danger:hover {
+  color: var(--red);
+}
+.action.danger:hover .ring {
+  background: var(--red-soft);
+  border-color: transparent;
+  color: var(--red);
+}
+
+.detail-section {
+  padding: 18px 24px;
+}
+.detail-section h4 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.timeline {
+  display: grid;
+  gap: 2px;
+}
+.timeline .item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+}
+.timeline .item:hover {
+  background: var(--surface-2);
+}
+.timeline .when {
+  color: var(--text-2);
+}
+.timeline .dur {
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- settings */
+
+.settings-scroll {
+  overflow-y: auto;
+  padding: 26px 0 60px;
+}
+.settings-inner {
+  width: min(680px, calc(100% - 56px));
+  margin: 0 auto;
+  display: grid;
+  gap: 18px;
+}
+.settings-inner > header h1 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+.settings-inner > header p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.card > header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.card > header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+.card > header p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.card .card-body {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+}
+.status-line .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--r-full);
+  background: var(--text-3);
+  flex: none;
+}
+.status-line[data-state="registered"] {
+  background: var(--green-soft);
+  border-color: transparent;
+}
+.status-line[data-state="registered"] .dot {
+  background: var(--green);
+}
+.status-line[data-state="connecting"] .dot {
+  background: var(--amber);
+  animation: pulse 1.4s var(--ease) infinite;
+}
+.status-line[data-state="failed"] {
+  background: var(--red-soft);
+  border-color: transparent;
+}
+.status-line[data-state="failed"] .dot {
+  background: var(--red);
+}
+.status-line .txt {
+  flex: 1;
+  min-width: 0;
+}
+.status-line .txt b {
+  display: block;
+  font-size: 13px;
+  font-weight: 650;
+}
+.status-line .txt span {
+  font-size: 12px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.meter {
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.meter i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--green), var(--amber));
+  transition: width 70ms linear;
+}
+
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.theme-opt {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: all var(--fast) var(--ease);
+}
+.theme-opt:hover {
+  border-color: var(--border-strong);
+}
+.theme-opt.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.theme-opt .swatch {
+  width: 100%;
+  height: 34px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+}
+.swatch.dark {
+  background: linear-gradient(135deg, #0a0c10 50%, #171b22 50%);
+}
+.swatch.light {
+  background: linear-gradient(135deg, #eef1f6 50%, #ffffff 50%);
+}
+.swatch.system {
+  background: linear-gradient(135deg, #0a0c10 50%, #eef1f6 50%);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 18px;
+  font-size: 12.5px;
+}
+.kv dt {
+  color: var(--text-3);
+}
+.kv dd {
+  margin: 0;
+  color: var(--text-2);
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+/* -------------------------------------------------------------- call screen */
+
+.callscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: none;
+  grid-template-rows: 1fr auto;
+  justify-items: center;
+  background: radial-gradient(90% 60% at 50% 12%, var(--surface-2) 0%, var(--bg-elev) 55%, var(--bg) 100%);
+}
+.callscreen.on {
+  display: grid;
+  animation: sheetUp var(--normal) var(--ease);
+}
+@keyframes sheetUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.callscreen .who {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  padding-top: 20px;
+}
+.callscreen h2 {
+  margin: 14px 0 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  text-align: center;
+}
+.callscreen .status {
+  font-size: 14.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.callscreen .status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--green);
+  animation: pulse 2s var(--ease) infinite;
+}
+
+/* The halo only runs while ringing; a static ring during a connected call
+   would be noise. */
+.ringing-halo {
+  position: relative;
+}
+.ringing-halo::before,
+.ringing-halo::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: var(--r-full);
+  border: 2px solid var(--accent);
+  opacity: 0;
+  animation: halo 2.2s var(--ease) infinite;
+}
+.ringing-halo::after {
+  animation-delay: 1.1s;
+}
+@keyframes halo {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.call-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 84px);
+  gap: 18px 26px;
+  padding: 0 0 22px;
+  justify-content: center;
+}
+.cc {
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.cc .ring {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: all var(--fast) var(--ease);
+}
+.cc:hover .ring {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.cc.active .ring {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+.cc.active {
+  color: var(--text);
+}
+.cc:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+/* Before a call connects, none of these do anything. Hidden rather than
+   removed so answering does not shift the accept button out from under the
+   cursor mid-click. */
+.call-controls.pending {
+  visibility: hidden;
+}
+
+.call-end-row {
+  display: flex;
+  gap: 40px;
+  justify-content: center;
+  padding-bottom: 34px;
+}
+.end-btn {
+  width: 66px;
+  height: 66px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(240, 82, 75, 0.32);
+  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.end-btn:hover {
+  background: var(--red-hover);
+  transform: translateY(-1px);
+}
+.end-btn:active {
+  transform: scale(0.95);
+}
+.end-btn.accept {
+  background: var(--green);
+  box-shadow: 0 6px 18px rgba(45, 190, 108, 0.32);
+  animation: bob 1.6s var(--ease) infinite;
+}
+.end-btn.accept:hover {
+  background: var(--green-hover);
+}
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* The in-call keypad slides over the controls rather than replacing the
+   screen, so the call context never disappears while you are entering an
+   extension or a menu choice. */
+.incall-pad {
+  position: absolute;
+  inset: auto 0 0 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: 16px 0 22px;
+  display: none;
+  justify-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-3);
+  animation: sheetUp var(--normal) var(--ease);
+}
+.incall-pad.on {
+  display: grid;
+}
+.incall-pad .sent {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+  min-height: 30px;
+  color: var(--text-2);
+}
+.incall-pad .keypad {
+  grid-template-columns: repeat(3, 64px);
+  gap: 10px 20px;
+  margin: 0;
+}
+.incall-pad .key {
+  width: 64px;
+  height: 64px;
+}
+.incall-pad .key .digit {
+  font-size: 23px;
+}
+
+/* ------------------------------------------------------------------- modal */
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(4, 6, 9, 0.62);
+  backdrop-filter: blur(3px);
+  display: none;
+  place-items: center;
+  padding: 30px;
+}
+.scrim.on {
+  display: grid;
+  animation: fade var(--fast) var(--ease);
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  width: min(460px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+  animation: sheetUp var(--normal) var(--ease);
+}
+.modal header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+}
+.modal .modal-body {
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+}
+.modal footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: var(--surface-2);
+}
+
+/* ------------------------------------------------------------------- toast */
+
+.toasts {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 60;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 15px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-2);
+  font-size: 13px;
+  font-weight: 550;
+  animation: toastIn var(--normal) var(--ease);
+  max-width: 480px;
+}
+.toast.leaving {
+  animation: toastOut var(--fast) var(--ease) forwards;
+}
+.toast.error {
+  border-color: var(--red);
+  color: var(--red);
+}
+.toast.ok {
+  border-color: var(--green);
+  color: var(--green);
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes toastOut {
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

@@ -1,0 +1,120 @@
+/* Design tokens.
+ *
+ * Every colour in the app resolves through one of these. Both themes define
+ * the complete set — no token is ever left to inherit from the other theme,
+ * because a half-defined theme fails as unreadable text rather than as
+ * something obviously broken.
+ */
+
+:root {
+  /* Dark is the default: this is a utility that sits open all day next to
+     other windows, and a bright white panel in a dark IDE is a glare source. */
+  --bg: #0a0c10;
+  --bg-elev: #0d1015;
+  --surface: #12151b;
+  --surface-2: #171b22;
+  --surface-3: #1e232b;
+  --surface-hover: #1c212a;
+
+  --border: #232932;
+  --border-strong: #2f3742;
+  --border-focus: #5b8def;
+
+  --text: #edf0f5;
+  --text-2: #98a2b3;
+  --text-3: #6b7686;
+  --text-on-accent: #ffffff;
+
+  --accent: #5b8def;
+  --accent-hover: #6f9bf2;
+  --accent-soft: rgba(91, 141, 239, 0.14);
+  --accent-ring: rgba(91, 141, 239, 0.35);
+
+  --green: #2dbe6c;
+  --green-hover: #35cf78;
+  --green-soft: rgba(45, 190, 108, 0.14);
+
+  --red: #f0524b;
+  --red-hover: #f4665f;
+  --red-soft: rgba(240, 82, 75, 0.14);
+
+  --amber: #e8a33d;
+  --amber-soft: rgba(232, 163, 61, 0.14);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 20px 50px rgba(0, 0, 0, 0.55);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-full: 999px;
+
+  --rail-w: 78px;
+  --list-w: 340px;
+  --titlebar-h: 38px;
+
+  /* One curve for everything that moves, so the app feels like one thing.
+     Slightly overshooting on enter reads as responsive rather than floaty. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --fast: 130ms;
+  --normal: 220ms;
+
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+}
+
+:root[data-theme="light"] {
+  --bg: #eef1f6;
+  --bg-elev: #e7ebf2;
+  --surface: #ffffff;
+  --surface-2: #f6f8fc;
+  --surface-3: #e9eef6;
+  --surface-hover: #f1f4fa;
+
+  --border: #dde4ee;
+  --border-strong: #c6d0de;
+  --border-focus: #3b76e8;
+
+  --text: #0f141c;
+  --text-2: #566173;
+  --text-3: #7f8a9b;
+  --text-on-accent: #ffffff;
+
+  --accent: #3b76e8;
+  --accent-hover: #2f66d4;
+  --accent-soft: rgba(59, 118, 232, 0.1);
+  --accent-ring: rgba(59, 118, 232, 0.3);
+
+  --green: #16a75c;
+  --green-hover: #12924f;
+  --green-soft: rgba(22, 167, 92, 0.12);
+
+  --red: #dc3b34;
+  --red-hover: #c7302a;
+  --red-soft: rgba(220, 59, 52, 0.1);
+
+  --amber: #c9822a;
+  --amber-soft: rgba(201, 130, 42, 0.12);
+
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-2: 0 8px 24px rgba(16, 24, 40, 0.1);
+  --shadow-3: 0 24px 56px rgba(16, 24, 40, 0.16);
+}
+
+/* Someone who has turned motion down does not want a call screen flying in. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fast: 0ms;
+    --normal: 0ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
