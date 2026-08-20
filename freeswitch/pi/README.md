@@ -200,3 +200,55 @@ That injects a call into the `public` context with the DID as the
 destination — the same shape a real trunk call takes — and bridges it to
 milliwatt once the softphone answers. The app should ring, and answering
 should give you a 1004 Hz tone.
+
+## Do not put a catch-all in the `public` context
+
+This cost real spam before it was noticed. The inbound rule originally read:
+
+```xml
+<condition field="destination_number" expression="^.*$">
+```
+
+with a comment reasoning that the instance has one gateway and one user, so a
+catch-all was honest routing. **That reasoning is wrong.** `public` is the
+context that unauthenticated SIP from the internet lands in — not just trunk
+calls. The trunk port has to be reachable for inbound calls to arrive, which
+means it is reachable by everyone, and SIP scanners find it within hours.
+
+The result: a continuous stream of INVITEs to guessed extensions (`101`,
+`6801`, `1000`…) routed straight to the softphone. **17,778 sessions, 106
+concurrent, ~3 a second**, and a phone ringing non-stop.
+
+Two fixes, both applied by `setup.sh`, and by `harden-trunk.py` for an
+instance that is already running:
+
+**1. Only route the line's own number.** Anything else falls through
+unmatched and is answered 404, ringing nothing. The pattern is derived from
+`landline_did`, so it follows whatever number is configured; if the DID is
+still a placeholder, nothing is routed inbound at all — the safe default.
+
+**2. An inbound ACL on the trunk profile**, so scanners are dropped before
+they reach the dialplan:
+
+```xml
+<param name="apply-inbound-acl" value="dialtone_trunk"/>
+```
+
+allowing only the carrier's range plus private space. Confirm it is working:
+
+```bash
+docker logs dialtone-freeswitch 2>&1 | grep "Rejected by acl"
+```
+
+Scanners rotate source addresses — during this incident it moved from
+`185.243.5.110` to `135.136.19.73` within minutes — so blocking individual IPs
+is not a fix. The ACL is.
+
+### Checking your own exposure
+
+```bash
+docker exec dialtone-freeswitch fs_cli -P 8022 -x "status" | grep session
+```
+
+`session(s) since startup` climbing by thousands, with nobody calling you, is
+the tell. On a quiet line that number should barely move.

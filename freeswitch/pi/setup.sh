@@ -151,12 +151,26 @@ sed -i \
 
 echo "== allowing mesh + LAN ICE candidates"
 A="$CONF/autoload_configs/acl.conf.xml"
-if ! grep -q 'dialtone_candidates' "$A"; then
+if ! grep -q 'dialtone_trunk' "$A"; then
   python3 - "$A" <<'PY'
 import sys, re
 path = sys.argv[1]
 src = open(path, encoding="utf-8").read()
 acl = '''
+    <!-- Who may send SIP to the trunk profile at all. The trunk port must be
+         reachable from the internet for inbound calls to arrive, which means
+         it is reachable by scanners too — they find it within hours and send a
+         continuous stream of INVITEs to guessed extensions. Without this list
+         FreeSWITCH accepts SIP from any source. -->
+    <list name="dialtone_trunk" default="deny">
+      <node type="allow" cidr="185.73.43.0/24"/>   <!-- voips.modulus.gr -->
+      <node type="allow" cidr="10.0.0.0/8"/>       <!-- carrier SBC, private -->
+      <node type="allow" cidr="172.16.0.0/12"/>
+      <node type="allow" cidr="192.168.0.0/16"/>
+      <node type="allow" cidr="127.0.0.0/8"/>
+      <node type="allow" cidr="100.64.0.0/10"/>    <!-- mesh VPN -->
+    </list>
+
     <!-- Candidate addresses Dialtone may be reached on. 100.64.0.0/10 is
          CGNAT space, which mesh VPNs use and FreeSWITCH's wan.auto denies. -->
     <list name="dialtone_candidates" default="deny">
@@ -179,6 +193,15 @@ fi
 sed -i '/<param name="candidate-acl"/d' "$I"
 if ! grep -q 'apply-candidate-acl' "$I"; then
   sed -i 's|\( *\)<param name="rtp-ip" value="\$\${dialtone_bind_ip}"/>|\1<param name="rtp-ip" value="$${dialtone_bind_ip}"/>\n\1<param name="apply-candidate-acl" value="dialtone_candidates"/>\n\1<param name="apply-candidate-acl" value="localnet.auto"/>\n\1<param name="apply-candidate-acl" value="wan_v4.auto"/>|' "$I"
+fi
+
+# --- 3c. lock the trunk profile to the carrier ------------------------------
+
+echo "== restricting who may send SIP to the trunk"
+E="$CONF/sip_profiles/external.xml"
+if ! grep -q 'apply-inbound-acl' "$E"; then
+  sed -i '0,/<settings>/s|<settings>|<settings>
+    <param name="apply-inbound-acl" value="dialtone_trunk"/>|' "$E"
 fi
 
 # The IPv6 profiles bind :5060 and :5080 on the Pi's global v6 address, which
@@ -295,13 +318,28 @@ cat > "$CONF/dialplan/default/00_dialtone.xml" <<'XML'
 </include>
 XML
 
+# The DID drives the inbound match. Derived here rather than hardcoded so the
+# rule follows whatever number is configured; if the DID is still a
+# placeholder, nothing is routed inbound, which is the safe default.
+DID_RAW="$(sed -nE 's/.*landline_did=([^"]*)".*/\1/p' "$VARS" 2>/dev/null | head -1)"
+NAT="${DID_RAW#+}"; NAT="${NAT#30}"
+if [ -n "$NAT" ] && [ "$DID_RAW" != "CHANGEME" ]; then
+  DID_PATTERN="^(\+?30)?${NAT}\$"
+else
+  DID_PATTERN="^\$a^"   # matches nothing
+fi
+
 cat > "$CONF/dialplan/public/00_dialtone_inbound.xml" <<'XML'
 <include>
-  <!-- Anything arriving on this instance's trunk rings the softphone. This
-       instance has exactly one gateway and one user, so a catch-all is the
-       honest routing rather than a shortcut. -->
+  <!-- Only this line's own number reaches the softphone.
+       This once matched ^.*$, reasoning that the instance has one gateway and
+       one user. That was wrong: `public` is where UNAUTHENTICATED internet SIP
+       lands, not just trunk calls, so the catch-all gave every scanner on the
+       internet a direct line to extension 1005 — thousands of calls a day.
+       Anything that is not our DID now falls through unmatched and is answered
+       with a 404, ringing nothing. -->
   <extension name="dialtone_inbound">
-    <condition field="destination_number" expression="^.*$">
+    <condition field="destination_number" expression="__DID_PATTERN__">
       <action application="set" data="domain_name=$${domain}"/>
 
       <!-- Pin the codecs offered TO the softphone.
@@ -322,6 +360,7 @@ cat > "$CONF/dialplan/public/00_dialtone_inbound.xml" <<'XML'
   </extension>
 </include>
 XML
+sed -i "s|__DID_PATTERN__|${DID_PATTERN}|" "$CONF/dialplan/public/00_dialtone_inbound.xml"
 
 # --- 7. a certificate for wss:// -------------------------------------------
 #
