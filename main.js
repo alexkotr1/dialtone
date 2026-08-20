@@ -17,6 +17,7 @@ const {
   Menu,
   nativeImage,
   safeStorage,
+  screen,
   shell,
   systemPreferences,
   Tray,
@@ -250,6 +251,106 @@ function createTray() {
   tray.on('click', showWindow);
 }
 
+// --- the incoming-call popup ----------------------------------------------
+//
+// A separate frameless, transparent, always-on-top window pinned to the
+// bottom-right corner. It exists because the main window is usually not what
+// you are looking at when the phone rings: it is in the tray, or behind an
+// editor. Dragging it to the front interrupts whatever you were doing to make
+// a decision that needs two buttons.
+//
+// The window is larger than the card it contains and never moves. The card
+// slides within it via a CSS transform, which the compositor handles; nudging
+// a window's bounds sixty times a second does not look like the same thing.
+
+const TOAST_W = 400;
+const TOAST_H = 120;
+
+let toast = null;
+/** Held so the popup can be re-rendered on reopen without waiting for the
+ *  next per-second update from the renderer. */
+let toastCall = null;
+
+function toastBounds() {
+  // workArea, not bounds: it excludes the taskbar, so the popup sits above it
+  // rather than under it.
+  const { workArea } = screen.getPrimaryDisplay();
+  return {
+    x: workArea.x + workArea.width - TOAST_W,
+    y: workArea.y + workArea.height - TOAST_H,
+    width: TOAST_W,
+    height: TOAST_H,
+  };
+}
+
+function createToast() {
+  if (toast) return toast;
+  toast = new BrowserWindow({
+    ...toastBounds(),
+    show: false,
+    frame: false,
+    transparent: true,
+    // We draw the shadow in CSS; the OS one would trace the whole transparent
+    // window, including the empty area the card slides through.
+    hasShadow: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-toast.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  // 'floating' keeps it above ordinary windows without fighting screensavers
+  // or UAC prompts.
+  toast.setAlwaysOnTop(true, 'floating');
+  toast.loadFile(path.join(__dirname, 'src', 'toast.html'));
+  toast.on('closed', () => {
+    toast = null;
+  });
+  return toast;
+}
+
+/** Should the popup be used, or is the app already in front of the person? */
+function appIsInForeground() {
+  return !!win && win.isVisible() && !win.isMinimized() && win.isFocused();
+}
+
+function showToast(call) {
+  toastCall = call;
+  const t = createToast();
+  const send = () => {
+    t.webContents.send('toast:theme', readJson(paths().settings, {}).theme || 'dark');
+    t.webContents.send('toast:call', call);
+  };
+  if (t.webContents.isLoading()) t.webContents.once('did-finish-load', send);
+  else send();
+
+  if (!t.isVisible()) {
+    t.setBounds(toastBounds());
+    // showInactive, not show: raising the popup must not steal focus from
+    // whatever the person is typing into. They can still click it.
+    t.showInactive();
+  }
+}
+
+function updateToast(call) {
+  toastCall = call;
+  if (toast && toast.isVisible()) toast.webContents.send('toast:call', call);
+}
+
+/** Ask the popup to slide out. It reports back when the animation is done,
+ *  and only then is the window hidden. */
+function dismissToast() {
+  toastCall = null;
+  if (toast && toast.isVisible()) toast.webContents.send('toast:dismiss');
+}
+
 /** Render the window to a PNG and quit. Dev-only; see SHOT above. */
 async function captureAndExit() {
   try {
@@ -257,6 +358,28 @@ async function captureAndExit() {
       await win.webContents.executeJavaScript(
         `document.documentElement.dataset.theme = ${JSON.stringify(FORCE_THEME)}`
       );
+    }
+    // `--route toast:<state>` photographs the call popup instead of the main
+    // window. It is its own window, so nothing else can capture it, and it is
+    // the piece most worth looking at before shipping.
+    if (ROUTE && ROUTE.startsWith('toast')) {
+      const status = ROUTE.split(':')[1] || 'ringing';
+      showToast({
+        active: true,
+        direction: 'in',
+        status,
+        number: '+302114443742',
+        name: 'Ada Lovelace',
+        seconds: 134,
+      });
+      // Long enough for the slide-in to finish, so the shot is of the settled
+      // card rather than a frame mid-transition.
+      await new Promise((r) => setTimeout(r, 900));
+      const shot = await toast.webContents.capturePage();
+      fs.writeFileSync(SHOT, shot.toPNG());
+      console.log(`captured ${SHOT}`);
+      app.exit(0);
+      return;
     }
     if (ROUTE === 'cert') {
       await win.webContents.executeJavaScript('window.__previewCert && window.__previewCert()');
@@ -676,6 +799,53 @@ ipcMain.handle('window:attention', () => {
 ipcMain.handle('window:stopAttention', () => {
   win?.flashFrame(false);
   return true;
+});
+
+// --- call popup -----------------------------------------------------------
+
+/**
+ * Called by the renderer on every change to an active call.
+ *
+ * Main decides whether the popup is warranted, because only main knows
+ * whether the window is visible, minimised or focused — the renderer can see
+ * document focus but not that it is sitting in the tray.
+ *
+ * @returns {boolean} whether the popup is currently showing
+ */
+ipcMain.handle('toast:sync', (_e, call) => {
+  if (!call || !call.active || call.status === 'ended') {
+    dismissToast();
+    return false;
+  }
+  // Outbound calls never get a popup: you are already looking at the app, you
+  // just dialled from it.
+  if (call.direction !== 'in') return false;
+
+  const showing = !!toast && toast.isVisible();
+  if (showing) {
+    updateToast(call);
+    return true;
+  }
+  // Only on the ringing edge. If the app was in front when it rang and the
+  // person then alt-tabbed away mid-call, popping a window up at them is not
+  // what they asked for.
+  if (call.status === 'ringing' && !appIsInForeground()) {
+    showToast(call);
+    return true;
+  }
+  return false;
+});
+
+ipcMain.on('toast:answer', () => win?.webContents.send('call:answer'));
+ipcMain.on('toast:decline', () => win?.webContents.send('call:hangup'));
+ipcMain.on('toast:open', () => {
+  showWindow();
+  dismissToast();
+});
+ipcMain.on('toast:dismissed', () => {
+  // Hidden rather than closed: recreating the window per call would mean
+  // reloading the page each time, and the first slide would stutter.
+  if (toast && !toast.isDestroyed()) toast.hide();
 });
 
 ipcMain.handle('cert:forget', (_e, host) => {

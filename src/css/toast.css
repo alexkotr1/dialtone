@@ -1,0 +1,224 @@
+/* The incoming-call popup.
+ *
+ * Lives in its own transparent, frameless window pinned to the bottom-right.
+ * The window never moves — the card slides inside it — because transform is
+ * composited on the GPU and stepping a window's bounds is not.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: var(--font);
+  color: var(--text);
+  user-select: none;
+  cursor: default;
+}
+
+button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+svg {
+  display: block;
+}
+
+.card {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 358px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+
+  /* Off to the right, past the window edge, until told otherwise. The extra
+     40px clears the shadow so nothing peeks out before the slide starts. */
+  transform: translateX(calc(100% + 40px));
+  opacity: 0;
+  transition:
+    transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 200ms ease-out;
+}
+
+.card.in {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* Leaving is quicker than arriving: an exit that lingers reads as lag. */
+.card.out {
+  transform: translateX(calc(100% + 40px));
+  opacity: 0;
+  transition:
+    transform 240ms cubic-bezier(0.5, 0, 0.75, 0),
+    opacity 200ms ease-in 40ms;
+}
+
+:root[data-theme="light"] .card {
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.1);
+}
+
+.who {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  /* The whole left side is a click target for opening the app. */
+  cursor: pointer;
+}
+
+.text {
+  min-width: 0;
+}
+
+.name {
+  font-size: 14.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status {
+  font-size: 12.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+}
+
+.status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--green);
+  flex: none;
+  animation: blink 2s var(--ease) infinite;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* The avatar rules are a deliberate copy of the ones in app.css rather than a
+   shared file: this window loads none of the app's stylesheet, and two small
+   rules are cheaper than making app.css load in a 400px popup. */
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  font-weight: 650;
+  font-size: 15px;
+  color: #fff;
+  flex: none;
+  background: linear-gradient(140deg, hsl(var(--h) 62% 52%), hsl(var(--h) 58% 40%));
+}
+
+.avatar.unknown {
+  background: var(--surface-3);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.act {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  transition:
+    transform 120ms var(--ease),
+    background 120ms var(--ease),
+    box-shadow 120ms var(--ease);
+}
+
+.act:hover {
+  transform: translateY(-1px);
+}
+.act:active {
+  transform: scale(0.93);
+}
+
+.act.answer {
+  background: var(--green);
+  box-shadow: 0 4px 12px rgba(45, 190, 108, 0.35);
+}
+.act.answer:hover {
+  background: var(--green-hover);
+}
+
+.act.decline {
+  background: var(--red);
+  box-shadow: 0 4px 12px rgba(240, 82, 75, 0.32);
+}
+.act.decline:hover {
+  background: var(--red-hover);
+}
+
+/* Only the ringing state bobs. Once connected the button is a plain hang-up
+   and movement would just be noise. */
+.act.answer.ringing {
+  animation: bob 1.5s var(--ease) infinite;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card.in,
+  .card.out {
+    transition-duration: 1ms;
+  }
+  .act.answer.ringing,
+  .status .dot {
+    animation: none;
+  }
+}

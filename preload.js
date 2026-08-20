@@ -39,6 +39,13 @@ contextBridge.exposeInMainWorld('dialtone', {
   tray: {
     registration: (state) => ipcRenderer.invoke('tray:registration', state),
   },
+  callToast: {
+    /** Report call state; main decides whether the popup is warranted. */
+    sync: (call) => ipcRenderer.invoke('toast:sync', call),
+    /** The popup's Answer / Decline buttons come back through here. */
+    onAnswer: (fn) => ipcRenderer.on('call:answer', () => fn()),
+    onHangup: (fn) => ipcRenderer.on('call:hangup', () => fn()),
+  },
   power: {
     keepAwake: (on) => ipcRenderer.invoke('power:keepAwake', on),
   },

@@ -54,7 +54,13 @@ answer "is it using the right mic?"), speaker selection, and theme.
 
 **Behaviour** — start with Windows (straight into the tray, no window); keep
 running in the tray when closed, so closing the window doesn't silently stop
-you taking calls; and come to the front when someone rings.
+you taking calls; and a call popup when someone rings.
+
+**Call popup** — when a call arrives and Dialtone is not in front, a small
+window slides in at the bottom-right: caller avatar, name, Answer and Decline.
+Answering turns it into a live timer; it slides back out when either side
+hangs up. Nothing is dragged to the foreground, and it never takes focus from
+what you were typing into.
 
 **Backup** — export account, contacts and history to a file and import them
 on another machine. The password is excluded by default, because it is
@@ -84,6 +90,8 @@ Incoming calls ring, and can be answered or declined.
 ```
 main.js            window, files on disk, the SIP password, TLS trust
 preload.js         the only bridge to Node — a fixed list of verbs
+preload-toast.js   a much smaller bridge, just for the call popup
+src/toast.html     the incoming-call popup, its own frameless window
 src/js/phone.js    all SIP: registration, one call, mute/hold/DTMF
 src/js/store.js    state, and the only thing that writes it
 src/js/audio.js    every sound, synthesised — no audio assets
@@ -153,5 +161,7 @@ all writes, so it cannot touch a real address book.
   codec" rather than connecting silently.
 - **No transfer, conference, voicemail UI, or presence.** Voicemail works if
   your dialplan has it — it is just a number to dial.
-- **Not packaged.** `npm start` runs it. `electron-builder` would produce an
-  installer if that becomes worth doing.
+- **Windows only, and unsigned.** The installer works but SmartScreen warns
+  on first run; signing needs a paid certificate tied to an identity.
+- **The call popup is placed on the primary display.** Predictable rather than
+  clever — it does not chase the cursor across monitors.

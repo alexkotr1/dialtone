@@ -21,8 +21,8 @@ const DEFAULT_SETTINGS = {
   speakerDeviceId: '',
   /** Close the window to the tray instead of quitting. */
   keepInTray: true,
-  /** Bring the window forward when a call arrives. */
-  focusOnCall: true,
+  /** Show the corner popup when a call arrives and the app is not in front. */
+  callPopup: true,
 };
 
 const listeners = new Set();
@@ -47,7 +47,15 @@ export function emit(what = 'all') {
 
 export async function load() {
   const data = await api.store.load();
-  state.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+  const stored = { ...(data.settings || {}) };
+  // `focusOnCall` raised the main window; it was replaced by the corner
+  // popup. Carry the old preference over rather than silently re-enabling
+  // something for someone who had turned it off.
+  if (stored.focusOnCall !== undefined && stored.callPopup === undefined) {
+    stored.callPopup = stored.focusOnCall;
+  }
+  delete stored.focusOnCall;
+  state.settings = { ...DEFAULT_SETTINGS, ...stored };
   state.contacts = Array.isArray(data.contacts) ? data.contacts : [];
   state.history = Array.isArray(data.history) ? data.history : [];
   state.encryptionAvailable = !!data.encryptionAvailable;

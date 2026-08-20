@@ -22,6 +22,7 @@ directories:
 files:
   - main.js
   - preload.js
+  - preload-toast.js
   - package.json
   - src/**/*
   - vendor/**/*

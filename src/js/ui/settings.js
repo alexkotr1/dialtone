@@ -166,11 +166,13 @@ function build() {
               <span class="track"><span class="thumb"></span></span>
             </label>
 
-            <label class="switch" id="setFocusOnCall">
+            <label class="switch" id="setCallPopup">
               <div>
-                <div style="font-size:13px;font-weight:600">Come to the front on an incoming call</div>
+                <div style="font-size:13px;font-weight:600">Show a call popup</div>
                 <div class="help">
-                  Raises the window and flashes the taskbar button when someone rings.
+                  When a call arrives and Dialtone is not in front, a small window slides in
+                  at the bottom-right with Answer and Decline. Nothing is pulled to the
+                  foreground.
                 </div>
               </div>
               <span class="track"><span class="thumb"></span></span>
@@ -320,11 +322,11 @@ function wire() {
     keepTray.classList.toggle('on', next);
   };
 
-  const focusCall = root.querySelector('#setFocusOnCall');
-  focusCall.onclick = () => {
-    const next = !state.settings.focusOnCall;
-    saveSettings({ focusOnCall: next });
-    focusCall.classList.toggle('on', next);
+  const callPopup = root.querySelector('#setCallPopup');
+  callPopup.onclick = () => {
+    const next = !state.settings.callPopup;
+    saveSettings({ callPopup: next });
+    callPopup.classList.toggle('on', next);
   };
 
   // --- backup ------------------------------------------------------------
@@ -450,7 +452,7 @@ export function refresh() {
 
   root.querySelector('#setAuto').classList.toggle('on', !!state.settings.autoConnect);
   root.querySelector('#setKeepTray').classList.toggle('on', !!state.settings.keepInTray);
-  root.querySelector('#setFocusOnCall').classList.toggle('on', !!state.settings.focusOnCall);
+  root.querySelector('#setCallPopup').classList.toggle('on', !!state.settings.callPopup);
   // Asked of the OS rather than read from our settings: the login item can be
   // removed in Task Manager without us hearing about it, and a toggle that
   // shows "on" for something Windows has disabled is worse than no toggle.

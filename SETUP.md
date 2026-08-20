@@ -266,8 +266,11 @@ Settings → Behaviour:
 - **Keep running in the tray when closed** — on by default, and worth leaving
   on: a softphone that quits when you close its window silently stops taking
   calls. Quit from the tray icon.
-- **Come to the front on an incoming call** — raises the window and flashes
-  the taskbar button.
+- **Show a call popup** — on by default. When a call arrives and Dialtone is
+  not the window in front, a small card slides in at the bottom-right with the
+  caller's name, Answer and Decline. Answering turns it into a live timer; it
+  slides out when the call ends. It is shown without taking focus, so it does
+  not interrupt what you were typing.
 
 ---
 

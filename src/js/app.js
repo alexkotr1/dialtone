@@ -9,7 +9,7 @@ import * as store from './store.js';
 import { state } from './store.js';
 import * as phone from './phone.js';
 import { endTone, ringback, ringtone } from './audio.js';
-import { duration, esc } from './format.js';
+import { duration, esc, sameNumber } from './format.js';
 
 import * as dialer from './ui/dialer.js';
 import * as recents from './ui/recents.js';
@@ -111,22 +111,26 @@ function placeCall(number, name = '') {
   return null;
 }
 
-/** Only raise the window once per call, not on every state update. */
-let attentionCallStartedAt = 0;
-
 function onCallUpdate(call) {
   callscreen.render(call);
 
-  // Someone is ringing and the window may be hidden in the tray or behind an
-  // IDE. Fire once, on the transition into a ringing inbound call.
-  const incomingRinging = call.active && call.direction === 'in' && call.status === 'ringing';
-  if (incomingRinging && state.settings.focusOnCall && call.startedAt !== attentionCallStartedAt) {
-    attentionCallStartedAt = call.startedAt;
-    window.dialtone.window.attention();
-  }
-  if (!call.active) {
-    attentionCallStartedAt = 0;
-    window.dialtone.window.stopAttention();
+  // The popup, when the app is not what the person is looking at. Main owns
+  // the decision — it is the only side that knows whether the window is in
+  // the tray, minimised or merely behind something. The name is resolved here
+  // because contacts live in the renderer.
+  if (state.settings.callPopup) {
+    const contact = call.number
+      ? state.contacts.find((c) => sameNumber(c.number, call.number))
+      : null;
+    window.dialtone.callToast.sync({
+      active: call.active,
+      direction: call.direction,
+      status: call.status,
+      number: call.number,
+      name: contact?.name || call.name || '',
+      seconds: call.seconds,
+      startedAt: call.startedAt,
+    });
   }
 
   // Tones follow the status, and each transition stops whatever was playing
@@ -318,6 +322,10 @@ async function main() {
   phone.on('registration', onRegistration);
   phone.on('call', onCallUpdate);
   phone.on('ended', onCallEnded);
+
+  // The popup's buttons act on the session, which only lives here.
+  window.dialtone.callToast.onAnswer(() => phone.answer());
+  window.dialtone.callToast.onHangup(() => phone.hangup());
 
   // Views that show contact names must redraw when contacts change.
   store.subscribe((what) => {

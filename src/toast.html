@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    />
+    <title>Incoming call</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/toast.css" />
+  </head>
+  <body>
+    <!-- The window is wider than the card on purpose. The card slides within
+         it using a CSS transform, which the compositor animates smoothly;
+         animating the window's own bounds frame by frame does not. -->
+    <div class="card" id="card">
+      <div class="who">
+        <div id="avatar"></div>
+        <div class="text">
+          <div class="name" id="name">Unknown</div>
+          <div class="status" id="status">Incoming call</div>
+        </div>
+      </div>
+      <div class="actions" id="actions"></div>
+    </div>
+    <script type="module" src="js/toast-window.js"></script>
+  </body>
+</html>
