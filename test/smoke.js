@@ -96,6 +96,24 @@
     assert(store.isConfigured({ wsUrl: 'wss://x', username: '1', domain: 'd' }), 'rejected valid');
   });
 
+  await check('a settings file with a UTF-8 BOM still parses', () => {
+    // JSON.parse rejects a leading BOM outright, and common tools add one -
+    // PowerShell's Set-Content -Encoding utf8 always does. Before this was
+    // handled, a BOM made readJson fall back to {}, which presents as every
+    // setting having been wiped.
+    const withBom = '﻿{"wsUrl":"ws://x:1","username":"9"}';
+    let threw = false;
+    try {
+      JSON.parse(withBom);
+    } catch {
+      threw = true;
+    }
+    assert(threw, 'JSON.parse tolerated a BOM; this test no longer proves anything');
+    const parsed = JSON.parse(withBom.replace(/^﻿/, ''));
+    assert(parsed.wsUrl === 'ws://x:1', 'stripping the BOM did not recover the object');
+    return 'BOM stripped';
+  });
+
   // --- import / export --------------------------------------------------
 
   await check('merging an import does not duplicate a contact already here', async () => {

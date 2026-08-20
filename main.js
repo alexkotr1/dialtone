@@ -90,7 +90,12 @@ const paths = () => ({
  *  worse than one that starts with an empty call log. */
 function readJson(file, fallback) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    // Strip a UTF-8 BOM before parsing. JSON.parse rejects one outright, and
+    // plenty of ordinary tools add it — PowerShell 5.1's `Set-Content
+    // -Encoding utf8` always does. Without this, editing settings.json with
+    // the wrong editor silently returns the fallback, which reads to the
+    // person as every setting having been wiped.
+    return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
   } catch {
     return fallback;
   }
