@@ -1,6 +1,6 @@
 import { icon } from '../icons.js';
 import { esc } from '../format.js';
-import { state, saveSettings, isConfigured, applyImport } from '../store.js';
+import { state, saveSettings, isConfigured, applyImport, mergeContacts } from '../store.js';
 import * as phone from '../phone.js';
 import { meterMic, playDtmf, ringtone } from '../audio.js';
 import { toast } from './toast.js';
@@ -300,6 +300,7 @@ function build() {
             <div style="display:flex;gap:10px;flex-wrap:wrap">
               <button class="btn" id="setExport">${icon('folder', 15)}Export to a file</button>
               <button class="btn" id="setImport">${icon('refresh', 15)}Import from a file</button>
+              <button class="btn" id="setImportVcf">${icon('users', 15)}Import contacts (vCard)</button>
             </div>
             <label class="switch" id="setExportPassword">
               <div>
@@ -577,6 +578,7 @@ function wire() {
   };
 
   root.querySelector('#setImport').onclick = () => importConfig();
+  root.querySelector('#setImportVcf').onclick = () => importVcf();
 
   root.querySelector('#setOpenData').onclick = () => window.dialtone.app.openDataDir();
 
@@ -599,6 +601,59 @@ function wire() {
  * Shows the counts before doing anything: an import that silently replaces a
  * contact list is the kind of thing people only notice a week later.
  */
+/**
+ * Import contacts from a .vcf exported by a phone.
+ *
+ * Contacts only. A phone's address book has no business rewriting the SIP
+ * account, so this deliberately does not go through the configuration import
+ * path, which replaces settings wholesale.
+ */
+async function importVcf() {
+  const res = await window.dialtone.config.importVcf();
+  if (!res?.ok) {
+    if (!res?.canceled) toast(res?.error || 'Could not read that file.', 'error');
+    return;
+  }
+
+  const { parseVCards } = await import('../vcard.js');
+  const { contacts, cards, skipped } = parseVCards(res.text);
+  if (!contacts.length) {
+    toast(
+      cards ? `Found ${cards} card${cards === 1 ? '' : 's'} but no phone numbers.`
+            : 'No contacts found in that file.',
+      'error',
+    );
+    return;
+  }
+
+  const lines = [
+    `<b>${contacts.length}</b> number${contacts.length === 1 ? '' : 's'} from ` +
+      `<b>${cards}</b> contact${cards === 1 ? '' : 's'}.`,
+  ];
+  if (contacts.length > cards) {
+    lines.push(
+      'Some people have more than one number. Each becomes its own entry, ' +
+      'labelled, rather than one entry that quietly drops the rest.',
+    );
+  }
+  if (skipped) {
+    lines.push(`${skipped} card${skipped === 1 ? '' : 's'} had no phone number and will be ignored.`);
+  }
+  lines.push('Anything already in your contacts, matched by number, is left alone.');
+
+  const go = await modal({
+    title: 'Import these contacts?',
+    body: lines.map((l) => `<p>${l}</p>`).join(''),
+    confirmText: 'Import',
+  });
+  if (!go) return;
+
+  const { added, duplicates } = await mergeContacts(contacts);
+  const bits = [`${added} added`];
+  if (duplicates) bits.push(`${duplicates} already here`);
+  toast(bits.join(', '), 'ok');
+}
+
 async function importConfig() {
   const r = await window.dialtone.config.import();
   if (r.canceled) return;

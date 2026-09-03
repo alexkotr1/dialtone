@@ -77,6 +77,43 @@ title bar rather than losing the call.
 
 Incoming calls ring, and can be answered or declined.
 
+## Bringing your contacts over
+
+Settings → Backup → **Import contacts (vCard)**.
+
+Getting the `.vcf` off an iPhone, easiest first:
+
+1. **iCloud, no cable** — [icloud.com](https://icloud.com) → Contacts → the
+   gear at the bottom left → Select All → **Export vCard**. One file, every
+   contact.
+2. **A Mac** — Contacts app → Select All → File → Export → Export vCard.
+3. **From the phone itself** — Contacts → a contact → Share Contact. Fine for
+   one or two, painful for a hundred; use iCloud instead.
+
+Anything that exports vCard works, not just Apple: Google Contacts, Outlook and
+most Android address books all do.
+
+What the import does with it:
+
+- **One entry per number.** A Dialtone contact holds a single number, so
+  somebody with a mobile and a landline becomes two entries, labelled
+  `Maria (mobile)` and `Maria (home)`, rather than one entry that quietly drops
+  the second number.
+- **Skips what you already have**, matched by number rather than by name — the
+  same person is spelled three ways across a phone book, but the number is what
+  identifies them. National and international forms of the same number count as
+  the same number.
+- **Never touches your SIP settings.** A phone's address book has no business
+  rewriting your account, so this is a different path from the configuration
+  import next to it.
+- Cards with no phone number at all are counted and reported rather than
+  imported as blanks.
+
+It handles the parts of the format that trip naive importers: folded lines,
+Apple's `item1.X-ABLabel` custom labels, quoted-printable encoding (so Greek
+names arrive as Greek rather than `=CE=91=CE=BD...`), escaped punctuation, and
+embedded photos.
+
 ## Changing your voice
 
 Settings → Voice transforms the outgoing microphone. It never touches what you

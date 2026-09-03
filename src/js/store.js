@@ -109,6 +109,44 @@ export function saveHistory() {
 
 const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
+/**
+ * Merge a list of contacts in, skipping ones already here.
+ *
+ * Matching is by number rather than by name, because the same person is
+ * spelled three ways across a phone book and a number is the thing that
+ * actually identifies them. Duplicates WITHIN the imported list are dropped
+ * too - a phone export routinely holds the same number under two cards.
+ *
+ * @returns {{added:number, duplicates:number}}
+ */
+export async function mergeContacts(list) {
+  const { sameNumber } = await import('./format.js');
+  let added = 0;
+  let duplicates = 0;
+  for (const c of list) {
+    if (!c || !c.number) continue;
+    const clash =
+      state.contacts.some((x) => sameNumber(x.number, c.number));
+    if (clash) {
+      duplicates++;
+      continue;
+    }
+    state.contacts.push({
+      id: id(),
+      name: c.name || c.number,
+      number: c.number,
+      company: c.company || '',
+      note: c.note || '',
+      favorite: !!c.favorite,
+      createdAt: Date.now(),
+    });
+    added++;
+  }
+  // saveContacts already emits.
+  if (added) saveContacts();
+  return { added, duplicates };
+}
+
 export function addContact(c) {
   const contact = {
     id: id(),

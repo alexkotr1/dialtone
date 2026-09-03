@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('dialtone', {
   config: {
     export: (opts) => ipcRenderer.invoke('config:export', opts || {}),
     import: () => ipcRenderer.invoke('config:import'),
+    importVcf: () => ipcRenderer.invoke('contacts:importVcf'),
   },
   startup: {
     get: () => ipcRenderer.invoke('startup:get'),

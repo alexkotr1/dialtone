@@ -283,6 +283,102 @@
     return seen.detail;
   });
 
+  // --- importing a phone's address book ----------------------------------
+
+  const { parseVCards } = await import('../src/js/vcard.js');
+  const vcf = (...lines) => lines.join('\r\n');
+
+  await check('reads a plain iCloud card', () => {
+    const r = parseVCards(vcf(
+      'BEGIN:VCARD', 'VERSION:3.0', 'N:Papadopoulos;Maria;;;', 'FN:Maria Papadopoulos',
+      'TEL;type=CELL;type=VOICE;type=pref:+30 697 123 4567', 'END:VCARD'));
+    assert(r.contacts.length === 1, `got ${r.contacts.length}`);
+    assert(r.contacts[0].name === 'Maria Papadopoulos', r.contacts[0].name);
+    // Punctuation stripped, so it matches what the dialpad produces.
+    assert(r.contacts[0].number === '+306971234567', r.contacts[0].number);
+  });
+
+  await check('a folded line is rejoined, not treated as a second field', () => {
+    // Apple wraps at 75 characters. Splitting naively truncates the name and
+    // leaves a fragment behind.
+    const r = parseVCards(vcf(
+      'BEGIN:VCARD', 'VERSION:3.0', 'FN:Georgios Antonopoulos-Papad', ' imitriou',
+      'TEL:+306944000111', 'END:VCARD'));
+    assert(r.contacts[0].name === 'Georgios Antonopoulos-Papadimitriou', r.contacts[0].name);
+  });
+
+  await check('every number is kept, labelled, when a person has several', () => {
+    // A Dialtone contact holds one number. Keeping only the first would
+    // silently lose the mobile of anyone who also has a landline.
+    const r = parseVCards(vcf(
+      'BEGIN:VCARD', 'VERSION:3.0', 'FN:Alex Kotr', 'ORG:Chronodesk;',
+      'item1.TEL;type=pref:+30 211 444 3742', 'item1.X-ABLabel:_$!<Work>!$_',
+      'TEL;type=CELL:6979194292', 'END:VCARD'));
+    assert(r.contacts.length === 2, `got ${r.contacts.length}`);
+    const names = r.contacts.map((c) => c.name).sort();
+    assert(names[0] === 'Alex Kotr (Work)', names.join(' | '));
+    assert(names[1] === 'Alex Kotr (mobile)', names.join(' | '));
+    assert(r.contacts.every((c) => c.company === 'Chronodesk'), 'company lost');
+  });
+
+  await check('quoted-printable names decode to real text', () => {
+    // Older Android exports. Left encoded, a Greek name imports as "=CE=91...".
+    const r = parseVCards(vcf(
+      'BEGIN:VCARD', 'VERSION:2.1',
+      'FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:=CE=91=CE=BD=CE=BD=CE=B1',
+      'TEL;CELL:+306900112233', 'END:VCARD'));
+    assert(r.contacts[0].name === 'Αννα', JSON.stringify(r.contacts[0].name));
+  });
+
+  await check('escaped punctuation in a note is restored', () => {
+    const r = parseVCards(vcf(
+      'BEGIN:VCARD', 'VERSION:3.0', 'FN:X', 'NOTE:Plumber\\, second floor\\nRing twice',
+      'TEL:+306944000111', 'END:VCARD'));
+    assert(r.contacts[0].note === 'Plumber, second floor\nRing twice',
+      JSON.stringify(r.contacts[0].note));
+  });
+
+  await check('a photo blob is not mistaken for contact data', () => {
+    const r = parseVCards(vcf(
+      'BEGIN:VCARD', 'VERSION:3.0', 'FN:Photo Guy',
+      'PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYH',
+      ' ChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/',
+      'TEL:+306911111111', 'END:VCARD'));
+    assert(r.contacts.length === 1, `got ${r.contacts.length}`);
+    assert(r.contacts[0].number === '+306911111111', r.contacts[0].number);
+  });
+
+  await check('cards with no phone number are counted, not invented', () => {
+    const r = parseVCards(vcf(
+      'BEGIN:VCARD', 'VERSION:3.0', 'FN:Email Only', 'EMAIL:a@b.c', 'END:VCARD'));
+    assert(r.contacts.length === 0, 'invented a contact with no number');
+    assert(r.skipped === 1, `skipped=${r.skipped}`);
+  });
+
+  await check('a truncated final card still yields its contact', () => {
+    // Files get cut short in transit; losing the last contact silently is
+    // worse than the truncation.
+    const r = parseVCards(vcf(
+      'BEGIN:VCARD', 'VERSION:3.0', 'FN:Truncated', 'TEL:+306922222222'));
+    assert(r.contacts.length === 1 && r.contacts[0].name === 'Truncated', 'lost the last card');
+  });
+
+  await check('importing merges by number and skips what is already here', async () => {
+    const before = store.state.contacts.length;
+    const mine = store.addContact({ name: 'Existing', number: '+302114443742' });
+    // Same line in national form, plus one genuinely new number.
+    const res = await store.mergeContacts([
+      { name: 'Existing Again', number: '2114443742' },
+      { name: 'Brand New', number: '+306955500001' },
+    ]);
+    assert(res.added === 1, `added ${res.added}, expected 1`);
+    assert(res.duplicates === 1, `duplicates ${res.duplicates}, expected 1`);
+    store.deleteContact(mine.id);
+    const added = store.state.contacts.find((c) => c.number === '+306955500001');
+    if (added) store.deleteContact(added.id);
+    assert(store.state.contacts.length === before, 'left contacts behind');
+  });
+
   // --- voice transformation ---------------------------------------------
   //
   // The DSP has its own measurement harness in tools/voicelab, which checks

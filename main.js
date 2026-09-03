@@ -867,6 +867,26 @@ ipcMain.handle('config:export', async (_e, { includePassword }) => {
   };
 });
 
+ipcMain.handle('contacts:importVcf', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: 'Import contacts from a vCard file',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'vCard', extensions: ['vcf', 'vcard'] }],
+  });
+  if (canceled || !filePaths?.length) return { ok: false, canceled: true };
+  try {
+    // Read as UTF-8 and drop a byte-order mark. Windows tools add one, and a
+    // BOM ahead of BEGIN:VCARD makes the first card unrecognisable - the same
+    // failure that once wiped the settings file.
+    const text = filePaths
+      .map((f) => fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, ''))
+      .join('\r\n');
+    return { ok: true, text, files: filePaths.length };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 ipcMain.handle('config:import', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
     title: 'Import Dialtone configuration',
