@@ -871,7 +871,10 @@ ipcMain.handle('contacts:importVcf', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
     title: 'Import contacts from a vCard file',
     properties: ['openFile', 'multiSelections'],
-    filters: [{ name: 'vCard', extensions: ['vcf', 'vcard'] }],
+    filters: [
+      { name: 'Contacts', extensions: ['vcf', 'vcard', 'txt'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
   });
   if (canceled || !filePaths?.length) return { ok: false, canceled: true };
   try {

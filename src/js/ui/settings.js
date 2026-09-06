@@ -298,9 +298,9 @@ function build() {
           </header>
           <div class="card-body">
             <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn" id="setExport">${icon('folder', 15)}Export to a file</button>
-              <button class="btn" id="setImport">${icon('refresh', 15)}Import from a file</button>
-              <button class="btn" id="setImportVcf">${icon('users', 15)}Import contacts (vCard)</button>
+              <button class="btn" id="setExport">${icon('folder', 15)}Export a backup</button>
+              <button class="btn" id="setImport">${icon('refresh', 15)}Restore a backup</button>
+              <button class="btn" id="setImportVcf">${icon('users', 15)}Import phone contacts (.vcf)</button>
             </div>
             <label class="switch" id="setExportPassword">
               <div>
